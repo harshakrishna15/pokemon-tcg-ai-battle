@@ -32,7 +32,7 @@ def card(card_id):
     return {"id": card_id, "serial": card_id * 100, "playerIndex": 0}
 
 
-def pokemon(card_id, hp=100):
+def pokemon(card_id, hp=100, energy_count=0):
     return {
         "id": card_id,
         "serial": card_id * 100,
@@ -40,8 +40,8 @@ def pokemon(card_id, hp=100):
         "hp": hp,
         "maxHp": hp,
         "appearThisTurn": False,
-        "energies": [],
-        "energyCards": [],
+        "energies": [3] * energy_count,
+        "energyCards": [card(3) for _ in range(energy_count)],
         "tools": [],
         "preEvolution": [],
     }
@@ -293,6 +293,89 @@ class AgentPolicyTests(unittest.TestCase):
             }
         )
         self.assertEqual(choose_action(obs, self.deck), [1])
+
+    def test_energy_acceleration_can_happen_before_attack_for_scaling_attacker(self):
+        obs = base_obs(
+            {
+                "type": 0,
+                "context": 0,
+                "minCount": 1,
+                "maxCount": 1,
+                "option": [
+                    {"type": OPT_PLAY, "index": 0},
+                    {
+                        "type": OPT_ATTACH,
+                        "area": AREA_HAND,
+                        "index": 1,
+                        "playerIndex": 0,
+                        "inPlayArea": AREA_ACTIVE,
+                        "inPlayIndex": 0,
+                    },
+                    {"type": OPT_ATTACK, "attackId": 999},
+                ],
+                "deck": None,
+                "contextCard": None,
+                "effect": None,
+            }
+        )
+        obs["current"]["players"][0]["active"] = [pokemon(154, 220, energy_count=1)]
+        obs["current"]["players"][0]["hand"] = [card(1235), card(3), card(1227)]
+        self.assertEqual(choose_action(obs, self.deck), [0])
+
+    def test_manual_attach_can_happen_before_attack_for_scaling_attacker(self):
+        obs = base_obs(
+            {
+                "type": 0,
+                "context": 0,
+                "minCount": 1,
+                "maxCount": 1,
+                "option": [
+                    {
+                        "type": OPT_ATTACH,
+                        "area": AREA_HAND,
+                        "index": 0,
+                        "playerIndex": 0,
+                        "inPlayArea": AREA_ACTIVE,
+                        "inPlayIndex": 0,
+                    },
+                    {"type": OPT_ATTACK, "attackId": 999},
+                ],
+                "deck": None,
+                "contextCard": None,
+                "effect": None,
+            }
+        )
+        obs["current"]["players"][0]["active"] = [pokemon(154, 220, energy_count=2)]
+        obs["current"]["players"][0]["hand"] = [card(3), card(1227)]
+        self.assertEqual(choose_action(obs, self.deck), [0])
+
+    def test_attack_wins_when_scaling_attacker_is_already_built(self):
+        obs = base_obs(
+            {
+                "type": 0,
+                "context": 0,
+                "minCount": 1,
+                "maxCount": 1,
+                "option": [
+                    {"type": OPT_PLAY, "index": 0},
+                    {
+                        "type": OPT_ATTACH,
+                        "area": AREA_HAND,
+                        "index": 1,
+                        "playerIndex": 0,
+                        "inPlayArea": AREA_ACTIVE,
+                        "inPlayIndex": 0,
+                    },
+                    {"type": OPT_ATTACK, "attackId": 999},
+                ],
+                "deck": None,
+                "contextCard": None,
+                "effect": None,
+            }
+        )
+        obs["current"]["players"][0]["active"] = [pokemon(154, 220, energy_count=5)]
+        obs["current"]["players"][0]["hand"] = [card(1235), card(3), card(1227)]
+        self.assertEqual(choose_action(obs, self.deck), [2])
 
 
 if __name__ == "__main__":

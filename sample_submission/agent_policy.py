@@ -505,6 +505,163 @@ def _attached_energy_count(pokemon: Any) -> int:
     )
 
 
+def _your_active_pokemon(obs: Any) -> Any:
+    active = _cards_in_area(obs, AREA_ACTIVE, _your_index(obs))
+    return active[0] if active else None
+
+
+def _resolve_target_pokemon(obs: Any, option: Any) -> Any:
+    in_play_area = _get(option, "inPlayArea")
+    in_play_index = _get(option, "inPlayIndex")
+    if in_play_area is None or in_play_index is None:
+        in_play_area = _get(option, "area")
+        in_play_index = _get(option, "index")
+
+    cards = _cards_in_area(obs, in_play_area, _your_index(obs))
+    if not cards:
+        return None
+    idx = _int(in_play_index, -1)
+    if idx < 0 or idx >= len(cards):
+        return None
+    return cards[idx]
+
+
+def _is_active_target(obs: Any, option: Any) -> bool:
+    return _get(option, "inPlayArea") == AREA_ACTIVE and _int(_get(option, "inPlayIndex"), -1) == 0
+
+
+def _preferred_energy_count(card_id: int | None, cards: dict[int, CardInfo], attacks) -> int:
+    if card_id is None:
+        return 0
+
+    info = _card_info(card_id, cards)
+    if not info.is_pokemon:
+        return 0
+
+    desired = 1 if info.basic else 2
+    attack_text = ""
+    for attack_id in info.attack_ids:
+        attack = attacks.get(attack_id)
+        if attack is None:
+            continue
+        desired = max(desired, attack.energy_count)
+        attack_text += f" {attack.name} {_get(attack, 'text', '')}"
+
+    text = f"{info.name} {info.effect_text} {attack_text}".lower()
+    if "for each energy attached" in text or "scales with attached energy" in text:
+        desired = max(desired, 5)
+    if "discard 2 energy from this" in text or "discard 2 energy from this pokemon" in text:
+        desired = max(desired, 4)
+    if "attach up to 2" in text and "energy" in text:
+        desired = max(desired, 4)
+    if info.ex:
+        desired = max(desired, 3)
+    if info.mega_ex:
+        desired = max(desired, 3)
+
+    # Static fallback for the submitted deck when the native simulator metadata
+    # is unavailable locally.
+    if card_id == 154:
+        desired = max(desired, 5)
+    elif card_id == 944:
+        desired = max(desired, 4)
+    elif card_id in {721, 723}:
+        desired = max(desired, 3)
+
+    return min(desired, 5)
+
+
+def _energy_gap_for_active(obs: Any, cards: dict[int, CardInfo], attacks) -> tuple[Any, int, int, int]:
+    active = _your_active_pokemon(obs)
+    active_id = _card_id(active)
+    desired = _preferred_energy_count(active_id, cards, attacks)
+    current = _attached_energy_count(active)
+    return active, current, desired, max(0, desired - current)
+
+
+def _energy_accel_available(options: list[Any], obs: Any, cards: dict[int, CardInfo]) -> bool:
+    for option in options:
+        if _int(_get(option, "type")) != OPT_PLAY:
+            continue
+        card_id = _resolve_option_card_id(obs, option)
+        if "energy_accel" in _role(card_id or 0, _card_info(card_id or 0, cards)):
+            return True
+    return False
+
+
+def _boost_build_before_attack(
+    obs: Any,
+    options: list[Any],
+    scored: list[tuple[int, float]],
+    profile: DeckProfile,
+    cards: dict[int, CardInfo],
+    attacks,
+) -> list[tuple[int, float]]:
+    attack_scores = [score for idx, score in scored if _int(_get(options[idx], "type")) == OPT_ATTACK]
+    if not attack_scores:
+        return scored
+
+    active, active_energy, desired_energy, gap = _energy_gap_for_active(obs, cards, attacks)
+    active_id = _card_id(active)
+    if active_id is None:
+        return scored
+
+    best_attack_score = max(attack_scores)
+    if gap <= 0:
+        adjusted = []
+        for idx, score in scored:
+            option = options[idx]
+            option_type = _int(_get(option, "type"))
+            card_id = _resolve_option_card_id(obs, option)
+            info = _card_info(card_id or 0, cards)
+            is_extra_energy_play = option_type == OPT_PLAY and "energy_accel" in _role(card_id or 0, info)
+            is_extra_attach = option_type == OPT_ATTACH and _is_active_target(obs, option)
+            if is_extra_energy_play or is_extra_attach:
+                adjusted.append((idx, min(score, best_attack_score - 140)))
+            else:
+                adjusted.append((idx, score))
+        return adjusted
+
+    state = _state(obs)
+    energy_attached = bool(_get(state, "energyAttached", False))
+    supporter_played = bool(_get(state, "supporterPlayed", False))
+    energy_accel_open = _energy_accel_available(options, obs, cards)
+    scaling_attacker = desired_energy >= 5
+
+    adjusted: list[tuple[int, float]] = []
+    for idx, score in scored:
+        option = options[idx]
+        option_type = _int(_get(option, "type"))
+        boosted = score
+
+        if option_type == OPT_PLAY:
+            card_id = _resolve_option_card_id(obs, option)
+            info = _card_info(card_id or 0, cards)
+            roles = _role(card_id or 0, info)
+            can_play_supporter = info.kind != "supporter" or not supporter_played
+            if "energy_accel" in roles and can_play_supporter and gap >= 2:
+                # Prefer acceleration before manual attachment when both can
+                # still happen this turn; that creates the stack-then-attack line.
+                offset = 180 + min(gap, 3) * 55
+                if scaling_attacker:
+                    offset += 120
+                boosted = max(boosted, best_attack_score + offset)
+
+        elif option_type == OPT_ATTACH and not energy_attached and _is_active_target(obs, option):
+            card_id = _resolve_option_card_id(obs, option)
+            if card_id in profile.main_energy_ids:
+                offset = 130 + min(gap, 3) * 45
+                if scaling_attacker:
+                    offset += 75
+                if energy_accel_open and gap >= 2 and not supporter_played:
+                    offset -= 120
+                boosted = max(boosted, best_attack_score + offset)
+
+        adjusted.append((idx, boosted))
+
+    return adjusted
+
+
 def _ids_from_pokemon(pokemon: Any) -> list[int]:
     if pokemon is None:
         return []
@@ -923,6 +1080,8 @@ def choose_action(obs: Any, deck: list[int] | None = None, use_search: bool = Tr
         (idx, _score_option(obs, option, profile, cards, attacks))
         for idx, option in enumerate(options)
     ]
+    if select_type == 0 and min_count == 1 and max_count == 1:
+        ranked_scores = _boost_build_before_attack(obs, options, ranked_scores, profile, cards, attacks)
     ranked_scores.sort(key=lambda item: (item[1], -item[0]), reverse=True)
 
     if use_search and select_type == 0 and min_count == 1 and max_count == 1:

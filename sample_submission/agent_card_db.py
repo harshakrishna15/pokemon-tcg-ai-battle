@@ -16,6 +16,7 @@ from functools import lru_cache
 class AttackInfo:
     attack_id: int
     name: str = ""
+    text: str = ""
     damage: int = 0
     energy_count: int = 0
 
@@ -218,6 +219,7 @@ def load_card_database() -> tuple[dict[int, CardInfo], dict[int, AttackInfo]]:
             attacks[attack_id] = AttackInfo(
                 attack_id=attack_id,
                 name=str(getattr(attack, "name", "")),
+                text=str(getattr(attack, "text", "")),
                 damage=int(damage),
                 energy_count=len(energies),
             )
