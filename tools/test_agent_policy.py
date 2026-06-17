@@ -246,7 +246,54 @@ class AgentPolicyTests(unittest.TestCase):
         )
         self.assertEqual(choose_action(obs, self.deck), [0])
 
+    def test_attack_after_setup_progress_beats_more_energy_stacking(self):
+        obs = base_obs(
+            {
+                "type": 0,
+                "context": 0,
+                "minCount": 1,
+                "maxCount": 1,
+                "option": [
+                    {"type": OPT_PLAY, "index": 3},
+                    {
+                        "type": OPT_ATTACH,
+                        "area": AREA_HAND,
+                        "index": 1,
+                        "playerIndex": 0,
+                        "inPlayArea": AREA_ACTIVE,
+                        "inPlayIndex": 0,
+                    },
+                    {"type": OPT_ATTACK, "attackId": 999},
+                    {"type": OPT_END},
+                ],
+                "deck": None,
+                "contextCard": None,
+                "effect": None,
+            }
+        )
+        obs["current"]["turnActionCount"] = 2
+        obs["current"]["energyAttached"] = True
+        self.assertEqual(choose_action(obs, self.deck), [2])
+
+    def test_attack_beats_draw_when_attack_is_already_available(self):
+        obs = base_obs(
+            {
+                "type": 0,
+                "context": 0,
+                "minCount": 1,
+                "maxCount": 1,
+                "option": [
+                    {"type": OPT_PLAY, "index": 3},
+                    {"type": OPT_ATTACK, "attackId": 999},
+                    {"type": OPT_END},
+                ],
+                "deck": None,
+                "contextCard": None,
+                "effect": None,
+            }
+        )
+        self.assertEqual(choose_action(obs, self.deck), [1])
+
 
 if __name__ == "__main__":
     unittest.main()
-

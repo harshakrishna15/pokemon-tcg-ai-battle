@@ -12,6 +12,7 @@ import os
 from collections import Counter, defaultdict
 from dataclasses import dataclass
 from functools import lru_cache
+from time import monotonic
 from typing import Any
 
 from agent_card_db import CardInfo, load_card_database
@@ -65,6 +66,11 @@ CTX_DRAW_COUNT = 38
 CTX_IS_FIRST = 41
 CTX_MULLIGAN = 42
 CTX_ACTIVATE = 43
+
+SEARCH_TIME_LIMIT_SECONDS = 0.12
+SEARCH_MAX_ROOT_OPTIONS = 6
+SEARCH_MAX_FORCED_STEPS = 5
+SEARCH_OVERRIDE_MARGIN = 35.0
 
 
 def _get(obj: Any, key: str, default: Any = None) -> Any:
@@ -465,7 +471,16 @@ def _score_option(obs: Any, option: Any, profile: DeckProfile, cards: dict[int, 
     if option_type == OPT_ATTACK:
         attack_id = _int(_get(option, "attackId"), -1)
         attack = attacks.get(attack_id)
-        return 470 + (attack.damage if attack else 80)
+        progress_bonus = 0
+        state = _state(obs)
+        if (
+            _int(_get(state, "turnActionCount", 0)) > 0
+            or bool(_get(state, "energyAttached", False))
+            or bool(_get(state, "supporterPlayed", False))
+            or bool(_get(state, "stadiumPlayed", False))
+        ):
+            progress_bonus = 650
+        return 820 + progress_bonus + (attack.damage if attack else 80)
     if option_type == OPT_RETREAT:
         return 210
     if option_type == OPT_CARD:
@@ -479,6 +494,370 @@ def _score_option(obs: Any, option: Any, profile: DeckProfile, cards: dict[int, 
     if option_type == OPT_END:
         return -1000
     return 0
+
+
+def _attached_energy_count(pokemon: Any) -> int:
+    # The observation exposes both energy units and the cards that created them.
+    # Use the larger count so special energy or transformed energy still matter.
+    return max(
+        len(_as_list(_get(pokemon, "energies", []))),
+        len(_as_list(_get(pokemon, "energyCards", []))),
+    )
+
+
+def _ids_from_pokemon(pokemon: Any) -> list[int]:
+    if pokemon is None:
+        return []
+
+    ids = []
+    card_id = _card_id(pokemon)
+    if card_id is not None:
+        ids.append(card_id)
+    for field in ("energyCards", "tools", "preEvolution"):
+        ids.extend(cid for cid in (_card_id(card) for card in _as_list(_get(pokemon, field, []))) if cid is not None)
+    return ids
+
+
+def _known_prize_ids(obs: Any, player_index: int) -> list[int]:
+    player = _player(obs, player_index)
+    return [cid for cid in (_card_id(card) for card in _as_list(_get(player, "prize", []))) if cid is not None]
+
+
+def _known_non_hidden_ids(obs: Any, player_index: int, include_hand: bool) -> list[int]:
+    # Search needs guesses for hidden zones. These IDs are already visible, so
+    # remove them from the guessed hidden deck/prize/hand pools where possible.
+    player = _player(obs, player_index)
+    ids: list[int] = []
+
+    if include_hand:
+        ids.extend(cid for cid in (_card_id(card) for card in _as_list(_get(player, "hand", []))) if cid is not None)
+    ids.extend(cid for cid in (_card_id(card) for card in _as_list(_get(player, "discard", []))) if cid is not None)
+
+    for pokemon in _as_list(_get(player, "active", [])) + _as_list(_get(player, "bench", [])):
+        ids.extend(_ids_from_pokemon(pokemon))
+
+    state = _state(obs)
+    for card in _as_list(_get(state, "stadium", [])):
+        if _get(card, "playerIndex") == player_index:
+            card_id = _card_id(card)
+            if card_id is not None:
+                ids.append(card_id)
+
+    for card in _as_list(_get(state, "looking", [])):
+        if _get(card, "playerIndex") == player_index:
+            card_id = _card_id(card)
+            if card_id is not None:
+                ids.append(card_id)
+
+    return ids
+
+
+def _remove_known_cards(base_cards: list[int], known_ids: list[int]) -> list[int]:
+    counts = Counter(base_cards)
+    for card_id in known_ids:
+        if counts[card_id] > 0:
+            counts[card_id] -= 1
+
+    remaining: list[int] = []
+    for card_id in base_cards:
+        if counts[card_id] > 0:
+            remaining.append(card_id)
+            counts[card_id] -= 1
+    return remaining
+
+
+def _hidden_card_priority(card_id: int, profile: DeckProfile, cards: dict[int, CardInfo]) -> float:
+    info = _card_info(card_id, cards)
+    if card_id in profile.evolution_ids:
+        return 500 + _pokemon_value(card_id, cards, profile.deck_counts)
+    if card_id in profile.attacker_ids[:4]:
+        return 420 + _pokemon_value(card_id, cards, profile.deck_counts)
+    if "search" in _role(card_id, info):
+        return 360
+    if "draw" in _role(card_id, info):
+        return 320
+    if card_id in profile.main_energy_ids:
+        return 180
+    return 80
+
+
+def _ordered_hidden_pool(pool: list[int], profile: DeckProfile, cards: dict[int, CardInfo]) -> list[int]:
+    # Stable ordering matters because the simulator will use this guess for
+    # draws. Keep it deterministic and mildly optimistic, not random.
+    return sorted(
+        pool,
+        key=lambda card_id: (_hidden_card_priority(card_id, profile, cards), -card_id),
+        reverse=True,
+    )
+
+
+def _fit_hidden_zone(known_ids: list[int], pool: list[int], count: int, fallback: list[int]) -> tuple[list[int], list[int]]:
+    result = known_ids[:count]
+    remaining = list(pool)
+
+    for card_id in result:
+        if card_id in remaining:
+            remaining.remove(card_id)
+
+    for card_id in list(remaining):
+        if len(result) >= count:
+            break
+        result.append(card_id)
+        remaining.remove(card_id)
+
+    fallback_idx = 0
+    while len(result) < count and fallback:
+        result.append(fallback[fallback_idx % len(fallback)])
+        fallback_idx += 1
+
+    return result, remaining
+
+
+def _basic_fallback(profile: DeckProfile, deck: list[int], cards: dict[int, CardInfo]) -> list[int]:
+    basics = sorted(
+        profile.basic_ids,
+        key=lambda card_id: _starter_value(card_id, cards, profile.deck_counts),
+        reverse=True,
+    )
+    if basics:
+        return [basics[0]]
+    return deck[:1]
+
+
+def _predict_hidden_zones(
+    obs: Any,
+    deck: list[int],
+    profile: DeckProfile,
+    cards: dict[int, CardInfo],
+) -> tuple[list[int], list[int], list[int], list[int], list[int], list[int]]:
+    state = _state(obs)
+    your_index = _your_index(obs)
+    opponent_index = 1 - your_index
+    your_player = _player(obs, your_index)
+    opponent_player = _player(obs, opponent_index)
+
+    your_deck_count = _int(_get(your_player, "deckCount", 0), 0)
+    your_prize_count = len(_as_list(_get(your_player, "prize", [])))
+    opponent_deck_count = _int(_get(opponent_player, "deckCount", 0), 0)
+    opponent_prize_count = len(_as_list(_get(opponent_player, "prize", [])))
+    opponent_hand_count = _int(_get(opponent_player, "handCount", 0), 0)
+
+    fallback = deck or list(profile.deck_counts.elements())
+    your_pool = _remove_known_cards(deck, _known_non_hidden_ids(obs, your_index, include_hand=True))
+    your_pool = _ordered_hidden_pool(your_pool, profile, cards)
+    your_prize, your_pool = _fit_hidden_zone(_known_prize_ids(obs, your_index), your_pool, your_prize_count, fallback)
+    your_deck, _ = _fit_hidden_zone([], your_pool, your_deck_count, fallback)
+
+    opponent_pool = _remove_known_cards(deck, _known_non_hidden_ids(obs, opponent_index, include_hand=False))
+    opponent_pool = _ordered_hidden_pool(opponent_pool, profile, cards)
+    opponent_prize, opponent_pool = _fit_hidden_zone(
+        _known_prize_ids(obs, opponent_index),
+        opponent_pool,
+        opponent_prize_count,
+        fallback,
+    )
+    opponent_hand, opponent_pool = _fit_hidden_zone([], opponent_pool, opponent_hand_count, fallback)
+    opponent_deck, _ = _fit_hidden_zone([], opponent_pool, opponent_deck_count, fallback)
+
+    opponent_active = []
+    active = _as_list(_get(opponent_player, "active", []))
+    if active and active[0] is None:
+        opponent_active = _basic_fallback(profile, deck, cards)
+
+    # Some early setup states can have a missing player array. Keep the search
+    # call valid by returning correctly typed empty guesses in that case.
+    if state is None:
+        return [], [], [], [], [], []
+
+    return your_deck, your_prize, opponent_deck, opponent_prize, opponent_hand, opponent_active
+
+
+def _pokemon_state_value(pokemon: Any, profile: DeckProfile, cards: dict[int, CardInfo]) -> float:
+    card_id = _card_id(pokemon)
+    if card_id is None:
+        return 0.0
+
+    info = _card_info(card_id, cards)
+    current_hp = _int(_get(pokemon, "hp", info.hp), info.hp)
+    max_hp = max(current_hp, _int(_get(pokemon, "maxHp", info.hp), info.hp))
+    damage = max(0, max_hp - current_hp)
+
+    value = _pokemon_value(card_id, cards, profile.deck_counts) * 0.55
+    value += current_hp * 1.15
+    value -= damage * 0.35
+    value += _attached_energy_count(pokemon) * 48
+    value += len(_as_list(_get(pokemon, "tools", []))) * 24
+    if info.ex:
+        value += 30
+    if info.mega_ex:
+        value += 45
+    return value
+
+
+def _player_state_value(obs: Any, player_index: int, profile: DeckProfile, cards: dict[int, CardInfo]) -> float:
+    player = _player(obs, player_index)
+    active = _as_list(_get(player, "active", []))
+    bench = _as_list(_get(player, "bench", []))
+
+    score = 0.0
+    if not active:
+        score -= 8000
+    for pokemon in active:
+        score += _pokemon_state_value(pokemon, profile, cards) * 1.25
+    for pokemon in bench:
+        score += _pokemon_state_value(pokemon, profile, cards) * 0.82
+
+    hand_count = _int(_get(player, "handCount", len(_as_list(_get(player, "hand", [])))), 0)
+    deck_count = _int(_get(player, "deckCount", 0), 0)
+    score += min(hand_count, 9) * 18
+    if deck_count <= 2:
+        score -= (3 - deck_count) * 350
+
+    if _get(player, "asleep", False) or _get(player, "paralyzed", False):
+        score -= 160
+    if _get(player, "confused", False):
+        score -= 70
+    if _get(player, "poisoned", False) or _get(player, "burned", False):
+        score -= 45
+
+    return score
+
+
+def _evaluate_observation(
+    obs: Any,
+    profile: DeckProfile,
+    cards: dict[int, CardInfo],
+    attacks,
+    root_your_index: int | None = None,
+) -> float:
+    state = _state(obs)
+    if state is None:
+        return 0.0
+
+    your_index = _your_index(obs) if root_your_index is None else root_your_index
+    opponent_index = 1 - your_index
+    result = _int(_get(state, "result", -1), -1)
+    if result == your_index:
+        return 500000.0
+    if result == opponent_index:
+        return -500000.0
+    if result == 2:
+        return 0.0
+
+    your_player = _player(obs, your_index)
+    opponent_player = _player(obs, opponent_index)
+    your_prizes = len(_as_list(_get(your_player, "prize", [])))
+    opponent_prizes = len(_as_list(_get(opponent_player, "prize", [])))
+
+    score = (opponent_prizes - your_prizes) * 950
+    score += _player_state_value(obs, your_index, profile, cards)
+    score -= _player_state_value(obs, opponent_index, profile, cards) * 0.92
+
+    select = _select(obs)
+    options = _as_list(_get(select, "option", []))
+    if options and _int(_get(state, "yourIndex", your_index), your_index) == your_index:
+        best_next = max((_score_option(obs, option, profile, cards, attacks) for option in options), default=0)
+        score += max(-200, min(best_next, 900)) * 0.16
+
+    return score
+
+
+def _rollout_forced_search_steps(api: Any, search_state: Any, deck: list[int], deadline: float) -> Any:
+    current = search_state
+    steps = 0
+
+    while steps < SEARCH_MAX_FORCED_STEPS and monotonic() < deadline:
+        obs = _get(current, "observation")
+        state = _state(obs)
+        select = _select(obs)
+        if select is None or _int(_get(state, "result", -1), -1) != -1:
+            break
+        if _int(_get(select, "type")) == 0:
+            break
+
+        action = choose_action(obs, deck, use_search=False)
+        if not action:
+            break
+        current = api.search_step(_get(current, "searchId"), action)
+        steps += 1
+
+    return current
+
+
+def _choose_with_simulator_search(
+    obs: Any,
+    deck: list[int],
+    profile: DeckProfile,
+    cards: dict[int, CardInfo],
+    attacks,
+    ranked_scores: list[tuple[int, float]],
+) -> list[int] | None:
+    # The official search API is available in the Kaggle/Linux simulator but
+    # not in local macOS tests. This wrapper is intentionally fail-closed.
+    if _get(obs, "search_begin_input") is None:
+        return None
+
+    deadline = monotonic() + SEARCH_TIME_LIMIT_SECONDS
+    options = _as_list(_get(_select(obs), "option", []))
+    if not options:
+        return None
+
+    candidate_indexes: list[int] = []
+    for idx, score in ranked_scores:
+        if score > -500 and idx not in candidate_indexes:
+            candidate_indexes.append(idx)
+        if len(candidate_indexes) >= SEARCH_MAX_ROOT_OPTIONS:
+            break
+
+    for idx, option in enumerate(options):
+        if _int(_get(option, "type")) == OPT_ATTACK and idx not in candidate_indexes:
+            candidate_indexes.append(idx)
+
+    if not candidate_indexes:
+        return None
+
+    try:
+        from cg import api
+
+        agent_observation = api.to_observation_class(obs) if isinstance(obs, dict) else obs
+        hidden = _predict_hidden_zones(obs, deck, profile, cards)
+        root = api.search_begin(agent_observation, *hidden, manual_coin=False)
+
+        heuristic = dict(ranked_scores)
+        best_idx = ranked_scores[0][0]
+        best_value = -float("inf")
+        heuristic_best_value = -float("inf")
+
+        for idx in candidate_indexes:
+            if monotonic() >= deadline:
+                break
+            child = api.search_step(_get(root, "searchId"), [idx])
+            final_state = _rollout_forced_search_steps(api, child, deck, deadline)
+            value = _evaluate_observation(
+                _get(final_state, "observation"),
+                profile,
+                cards,
+                attacks,
+                root_your_index=_your_index(obs),
+            )
+            value += heuristic.get(idx, 0) * 0.08
+            if idx == ranked_scores[0][0]:
+                heuristic_best_value = value
+            if value > best_value:
+                best_value = value
+                best_idx = idx
+
+        api.search_end()
+
+        if best_idx != ranked_scores[0][0] and best_value < heuristic_best_value + SEARCH_OVERRIDE_MARGIN:
+            return None
+        return [best_idx]
+    except Exception:
+        try:
+            api.search_end()
+        except Exception:
+            pass
+        return None
 
 
 def _choose_yes_no(obs: Any, options: list[Any]) -> list[int]:
@@ -497,7 +876,7 @@ def _choose_yes_no(obs: Any, options: list[Any]) -> list[int]:
     return [0] if options else []
 
 
-def choose_action(obs: Any, deck: list[int] | None = None) -> list[int]:
+def choose_action(obs: Any, deck: list[int] | None = None, use_search: bool = True) -> list[int]:
     """Return legal option indexes for the current observation."""
 
     if deck is None:
@@ -545,6 +924,11 @@ def choose_action(obs: Any, deck: list[int] | None = None) -> list[int]:
         for idx, option in enumerate(options)
     ]
     ranked_scores.sort(key=lambda item: (item[1], -item[0]), reverse=True)
+
+    if use_search and select_type == 0 and min_count == 1 and max_count == 1:
+        searched = _choose_with_simulator_search(obs, deck, profile, cards, attacks, ranked_scores)
+        if searched is not None:
+            return searched
 
     selected = [idx for idx, score in ranked_scores if score > 0][:max_count]
     if len(selected) < min_count:
