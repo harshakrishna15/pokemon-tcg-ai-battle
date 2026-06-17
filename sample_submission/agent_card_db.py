@@ -1,3 +1,11 @@
+"""Card facts used by the generic policy.
+
+The simulator can expose full card and attack metadata in Kaggle/Linux. Local
+macOS tests cannot load the bundled Linux native library, so this module keeps a
+small static fallback for the current deck and lets the official API overwrite
+it whenever that API is available.
+"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -42,6 +50,8 @@ class CardInfo:
         return self.kind in {"item", "tool", "supporter", "stadium"}
 
 
+# Fallback facts are intentionally small. They should cover the submitted deck
+# and local tests; the full simulator database is preferred at runtime.
 STATIC_CARDS: dict[int, CardInfo] = {
     1: CardInfo(1, "Basic Grass Energy", "basic_energy", energy_type="grass"),
     2: CardInfo(2, "Basic Fire Energy", "basic_energy", energy_type="fire"),
@@ -133,6 +143,8 @@ STATIC_CARDS: dict[int, CardInfo] = {
 }
 
 
+# These values mirror cg.api enums without importing cg.api at module import
+# time. Importing cg.api loads the native simulator library.
 CARD_TYPE_BY_VALUE = {
     0: "pokemon",
     1: "item",
@@ -169,6 +181,8 @@ def _enum_value(value) -> int | None:
 
 
 def _text_from_skills(card) -> str:
+    # Skill text is useful for generic role detection, but the official card
+    # objects may append new fields over time. getattr keeps this tolerant.
     skills = getattr(card, "skills", None) or []
     parts = []
     for skill in skills:
@@ -195,6 +209,8 @@ def load_card_database() -> tuple[dict[int, CardInfo], dict[int, AttackInfo]]:
     try:
         from cg.api import all_attack, all_card_data
 
+        # In the real submission environment this branch gives the policy a
+        # fuller view of every card in the simulator, not just the fallback set.
         for attack in all_attack():
             attack_id = int(getattr(attack, "attackId"))
             energies = getattr(attack, "energies", None) or []
@@ -235,7 +251,9 @@ def load_card_database() -> tuple[dict[int, CardInfo], dict[int, AttackInfo]]:
                 attack_ids=tuple(int(v) for v in (getattr(card, "attacks", None) or [])),
             )
     except Exception:
+        # Local development on macOS lands here because libcg.so is Linux-only.
+        # The fallback is enough for unit tests and still keeps the submission
+        # offline and self-contained.
         pass
 
     return cards, attacks
-

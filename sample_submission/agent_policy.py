@@ -1,3 +1,11 @@
+"""Deck-profile-driven action policy.
+
+The policy avoids hardcoding one exact deck sequence. It infers basic roles from
+deck.csv and card facts, then scores the legal options that the simulator sends.
+This keeps the agent usable when the deck changes, while still allowing card
+facts to improve the scoring when the simulator database is available.
+"""
+
 from __future__ import annotations
 
 import os
@@ -9,6 +17,8 @@ from typing import Any
 from agent_card_db import CardInfo, load_card_database
 
 
+# Numeric constants mirror cg.api enums. Keeping them here avoids importing
+# cg.api in local tests, because importing cg.api loads the native simulator.
 AREA_DECK = 1
 AREA_HAND = 2
 AREA_DISCARD = 3
@@ -79,6 +89,8 @@ def _int(value: Any, default: int = 0) -> int:
 
 
 def read_deck_csv() -> list[int]:
+    # Kaggle runs with deck.csv in the agent root. Local tests may import this
+    # module from the repository root, so also check beside this file.
     here = os.path.dirname(os.path.abspath(__file__))
     candidates = [
         "deck.csv",
@@ -94,6 +106,8 @@ def read_deck_csv() -> list[int]:
 
 @dataclass(frozen=True)
 class DeckProfile:
+    """Facts inferred from the submitted deck list."""
+
     deck_counts: Counter[int]
     main_energy_ids: tuple[int, ...]
     pokemon_ids: frozenset[int]
@@ -108,6 +122,8 @@ def _card_info(card_id: int, cards: dict[int, CardInfo]) -> CardInfo:
 
 
 def _pokemon_value(card_id: int, cards: dict[int, CardInfo], deck_counts: Counter[int]) -> float:
+    # A compact attacker/setup heuristic: durability, rule-box strength, stage,
+    # and deck commitment all increase priority.
     info = _card_info(card_id, cards)
     if not info.is_pokemon:
         return 0.0
@@ -127,6 +143,8 @@ def _pokemon_value(card_id: int, cards: dict[int, CardInfo], deck_counts: Counte
 
 
 def _starter_value(card_id: int, cards: dict[int, CardInfo], deck_counts: Counter[int]) -> float:
+    # Opening Active should usually be a Basic, and single-prize Basics are less
+    # punishing than starting a high-value ex when there is a choice.
     info = _card_info(card_id, cards)
     value = _pokemon_value(card_id, cards, deck_counts)
     if not info.basic:
@@ -149,6 +167,8 @@ def _evolution_map(cards: dict[int, CardInfo], deck_counts: Counter[int]) -> dic
 
 @lru_cache(maxsize=16)
 def _profile_for_deck(deck_tuple: tuple[int, ...]) -> DeckProfile:
+    # Cache by full deck contents so changing deck.csv automatically gives a new
+    # profile without needing deck-specific code changes.
     cards, _ = load_card_database()
     counts = Counter(deck_tuple)
     energy_ids = [cid for cid in counts if _card_info(cid, cards).kind == "basic_energy"]
@@ -212,6 +232,8 @@ def _card_id(card: Any) -> int | None:
 
 
 def _cards_in_area(obs: Any, area: int | None, player_index: int | None = None) -> list[Any]:
+    # Options reference cards by area plus index. This resolver works against
+    # raw dict observations and dataclass observations.
     state = _state(obs)
     select = _select(obs)
     player = _player(obs, player_index)
@@ -299,6 +321,8 @@ def _bench_space(obs: Any) -> int:
 
 
 def _role(card_id: int, info: CardInfo) -> set[str]:
+    # Keyword roles are deliberately broad. They make unknown trainer cards
+    # useful without needing a custom branch for every card name.
     text = f"{info.name} {info.effect_text}".lower()
     roles: set[str] = set()
     if "search your deck" in text or "mega signal" in text or "ultra ball" in text:
@@ -323,6 +347,8 @@ def _role(card_id: int, info: CardInfo) -> set[str]:
 
 
 def _score_play_card(obs: Any, card_id: int | None, profile: DeckProfile, cards: dict[int, CardInfo]) -> float:
+    # Main-phase play scoring rewards setup first, then search/draw/energy
+    # acceleration. Supporters get a small tax because only one can be used.
     if card_id is None:
         return 100
     info = _card_info(card_id, cards)
@@ -392,6 +418,8 @@ def _score_card_pick(obs: Any, card_id: int | None, profile: DeckProfile, cards:
 
 
 def _discard_penalty(obs: Any, card_id: int | None, profile: DeckProfile, cards: dict[int, CardInfo]) -> float:
+    # Lower penalty means a better discard. Basic Energy is usually the safest
+    # discard in this deck shape, while unique attackers and evolutions are kept.
     if card_id is None:
         return 100
     info = _card_info(card_id, cards)
@@ -419,6 +447,8 @@ def _discard_penalty(obs: Any, card_id: int | None, profile: DeckProfile, cards:
 
 
 def _score_option(obs: Any, option: Any, profile: DeckProfile, cards: dict[int, CardInfo], attacks) -> float:
+    # Convert each legal option into a single comparable score. The simulator
+    # still enforces legality; this only chooses among legal indexes.
     option_type = _int(_get(option, "type"))
     card_id = _resolve_option_card_id(obs, option)
 
@@ -452,6 +482,7 @@ def _score_option(obs: Any, option: Any, profile: DeckProfile, cards: dict[int, 
 
 
 def _choose_yes_no(obs: Any, options: list[Any]) -> list[int]:
+    # Default yes for proactive effects, but do not voluntarily mulligan.
     context = _int(_get(_select(obs), "context"))
     prefer_yes = context in {CTX_IS_FIRST, CTX_ACTIVATE}
     if context == CTX_MULLIGAN:
@@ -467,6 +498,8 @@ def _choose_yes_no(obs: Any, options: list[Any]) -> list[int]:
 
 
 def choose_action(obs: Any, deck: list[int] | None = None) -> list[int]:
+    """Return legal option indexes for the current observation."""
+
     if deck is None:
         deck = read_deck_csv()
 
@@ -490,6 +523,7 @@ def choose_action(obs: Any, deck: list[int] | None = None) -> list[int]:
     profile = _profile(deck)
 
     if select_type == SEL_COUNT or context == CTX_DRAW_COUNT:
+        # Count prompts usually ask how much of a beneficial effect to take.
         ranked = sorted(
             range(len(options)),
             key=lambda idx: _int(_get(options[idx], "number"), idx),
@@ -498,6 +532,7 @@ def choose_action(obs: Any, deck: list[int] | None = None) -> list[int]:
         return ranked[: max(1, min_count)]
 
     if context == CTX_DISCARD:
+        # Discard prompts are inverted: choose the lowest-value cards first.
         ranked = sorted(
             range(len(options)),
             key=lambda idx: (_discard_penalty(obs, _resolve_option_card_id(obs, options[idx]), profile, cards), idx),
