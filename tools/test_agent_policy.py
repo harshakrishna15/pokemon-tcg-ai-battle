@@ -377,6 +377,64 @@ class AgentPolicyTests(unittest.TestCase):
         obs["current"]["players"][0]["hand"] = [card(1235), card(3), card(1227)]
         self.assertEqual(choose_action(obs, self.deck), [2])
 
+    def test_attack_takes_prize_before_more_energy(self):
+        obs = base_obs(
+            {
+                "type": 0,
+                "context": 0,
+                "minCount": 1,
+                "maxCount": 1,
+                "option": [
+                    {"type": OPT_PLAY, "index": 0},
+                    {
+                        "type": OPT_ATTACH,
+                        "area": AREA_HAND,
+                        "index": 1,
+                        "playerIndex": 0,
+                        "inPlayArea": AREA_ACTIVE,
+                        "inPlayIndex": 0,
+                    },
+                    {"type": OPT_ATTACK, "attackId": 999},
+                ],
+                "deck": None,
+                "contextCard": None,
+                "effect": None,
+            }
+        )
+        obs["current"]["players"][0]["active"] = [pokemon(154, 220, energy_count=4)]
+        obs["current"]["players"][0]["hand"] = [card(1235), card(3), card(1227)]
+        obs["current"]["players"][1]["active"] = [pokemon(944, 160, energy_count=0)]
+        self.assertEqual(choose_action(obs, self.deck), [2])
+
+    def test_attack_before_building_when_active_is_under_ko_threat(self):
+        obs = base_obs(
+            {
+                "type": 0,
+                "context": 0,
+                "minCount": 1,
+                "maxCount": 1,
+                "option": [
+                    {"type": OPT_PLAY, "index": 0},
+                    {
+                        "type": OPT_ATTACH,
+                        "area": AREA_HAND,
+                        "index": 1,
+                        "playerIndex": 0,
+                        "inPlayArea": AREA_ACTIVE,
+                        "inPlayIndex": 0,
+                    },
+                    {"type": OPT_ATTACK, "attackId": 999},
+                ],
+                "deck": None,
+                "contextCard": None,
+                "effect": None,
+            }
+        )
+        obs["current"]["players"][0]["active"] = [pokemon(154, 140, energy_count=3)]
+        obs["current"]["players"][0]["hand"] = [card(1235), card(3), card(1227)]
+        obs["current"]["players"][1]["active"] = [pokemon(154, 220, energy_count=5)]
+        self.assertEqual(choose_action(obs, self.deck), [2])
+
 
 if __name__ == "__main__":
     unittest.main()

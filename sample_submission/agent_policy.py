@@ -471,6 +471,7 @@ def _score_option(obs: Any, option: Any, profile: DeckProfile, cards: dict[int, 
     if option_type == OPT_ATTACK:
         attack_id = _int(_get(option, "attackId"), -1)
         attack = attacks.get(attack_id)
+        estimated_damage = _estimate_attack_damage(obs, option, profile, cards, attacks)
         progress_bonus = 0
         state = _state(obs)
         if (
@@ -480,7 +481,14 @@ def _score_option(obs: Any, option: Any, profile: DeckProfile, cards: dict[int, 
             or bool(_get(state, "stadiumPlayed", False))
         ):
             progress_bonus = 650
-        return 820 + progress_bonus + (attack.damage if attack else 80)
+        known_damage = attack.damage if attack else 0
+        return 820 + progress_bonus + max(known_damage, estimated_damage, 80) + _attack_tactical_bonus(
+            obs,
+            option,
+            profile,
+            cards,
+            attacks,
+        )
     if option_type == OPT_RETREAT:
         return 210
     if option_type == OPT_CARD:
@@ -528,6 +536,165 @@ def _resolve_target_pokemon(obs: Any, option: Any) -> Any:
 
 def _is_active_target(obs: Any, option: Any) -> bool:
     return _get(option, "inPlayArea") == AREA_ACTIVE and _int(_get(option, "inPlayIndex"), -1) == 0
+
+
+def _opponent_index(obs: Any, player_index: int | None = None) -> int:
+    idx = _your_index(obs) if player_index is None else player_index
+    return 1 - idx
+
+
+def _active_pokemon(obs: Any, player_index: int) -> Any:
+    active = _cards_in_area(obs, AREA_ACTIVE, player_index)
+    return active[0] if active else None
+
+
+def _remaining_hp(pokemon: Any, cards: dict[int, CardInfo]) -> int:
+    card_id = _card_id(pokemon)
+    info = _card_info(card_id or 0, cards)
+    return _int(_get(pokemon, "hp", info.hp), info.hp)
+
+
+def _prize_value(card_id: int | None, cards: dict[int, CardInfo]) -> int:
+    info = _card_info(card_id or 0, cards)
+    if info.mega_ex:
+        return 3
+    if info.ex:
+        return 2
+    return 1
+
+
+def _count_basic_energy_in_area(obs: Any, area: int, player_index: int, energy_ids: tuple[int, ...]) -> int:
+    return sum(1 for card in _cards_in_area(obs, area, player_index) if _card_id(card) in energy_ids)
+
+
+def _deck_energy_density(obs: Any, profile: DeckProfile) -> float:
+    player = _player(obs, _your_index(obs))
+    deck_count = max(1, _int(_get(player, "deckCount", 0), 0))
+    visible_energy = 0
+    for area in (AREA_HAND, AREA_DISCARD, AREA_ACTIVE, AREA_BENCH, AREA_PRIZE):
+        visible_energy += _count_basic_energy_in_area(obs, area, _your_index(obs), profile.main_energy_ids)
+    remaining_energy = max(0, sum(profile.deck_counts[cid] for cid in profile.main_energy_ids) - visible_energy)
+    return min(1.0, remaining_energy / deck_count)
+
+
+def _attack_text(attack: Any) -> str:
+    if attack is None:
+        return ""
+    return f"{_get(attack, 'name', '')} {_get(attack, 'text', '')}".lower()
+
+
+def _estimate_attack_damage(
+    obs: Any,
+    option: Any,
+    profile: DeckProfile,
+    cards: dict[int, CardInfo],
+    attacks,
+    player_index: int | None = None,
+) -> int:
+    player_index = _your_index(obs) if player_index is None else player_index
+    active = _active_pokemon(obs, player_index)
+    active_id = _card_id(active)
+    attack_id = _int(_get(option, "attackId"), -1)
+    attack = attacks.get(attack_id)
+    active_energy = _attached_energy_count(active)
+    text = _attack_text(attack)
+    damage = _int(_get(attack, "damage", 0), 0)
+
+    if "for each energy attached" in text:
+        multiplier = damage if damage > 0 else 40
+        damage = max(damage, multiplier * active_energy)
+    if "for each basic" in text and "energy card in your discard" in text:
+        discard_energy = _count_basic_energy_in_area(obs, AREA_DISCARD, player_index, profile.main_energy_ids)
+        multiplier = damage if damage > 0 else 20
+        damage = max(damage, multiplier * discard_energy)
+    if "discard the top 6 cards" in text and "basic" in text and "energy" in text:
+        expected_hits = int(round(6 * _deck_energy_density(obs, profile)))
+        multiplier = damage if damage > 0 else 100
+        damage = max(damage, multiplier * max(1, expected_hits))
+
+    # Static estimates keep local tests useful when cg.api cannot expose attack
+    # metadata on macOS. They are deliberately conservative except for scaling.
+    if damage <= 0:
+        if active_id == 154:
+            damage = 40 * active_energy
+        elif active_id == 721:
+            discard_energy = _count_basic_energy_in_area(obs, AREA_DISCARD, player_index, profile.main_energy_ids)
+            damage = max(20 * discard_energy, 130 if active_energy >= 3 else 0)
+        elif active_id == 723:
+            damage = 200 if active_energy >= 3 else int(round(600 * _deck_energy_density(obs, profile)))
+        elif active_id == 944:
+            damage = 140 if active_energy >= 4 else 0
+        elif active_id == 722:
+            damage = 30 if active_energy >= 2 else 10 if active_energy >= 1 else 0
+
+    return max(0, damage)
+
+
+def _estimate_visible_threat_damage(obs: Any, player_index: int, profile: DeckProfile, cards: dict[int, CardInfo], attacks) -> int:
+    active = _active_pokemon(obs, player_index)
+    active_id = _card_id(active)
+    if active_id is None:
+        return 0
+
+    info = _card_info(active_id, cards)
+    energy_count = _attached_energy_count(active)
+    best = 0
+    for attack_id in info.attack_ids:
+        attack = attacks.get(attack_id)
+        if attack is None or _int(_get(attack, "energy_count", 0), 0) > energy_count + 1:
+            continue
+        pseudo_option = {"type": OPT_ATTACK, "attackId": attack_id}
+        best = max(best, _estimate_attack_damage(obs, pseudo_option, profile, cards, attacks, player_index))
+
+    if best <= 0:
+        # Unknown opposing deck: approximate from board investment so we still
+        # respect a powered-up attacker instead of goldfishing blindly.
+        best = energy_count * 45
+        if info.ex:
+            best += 35
+        if info.stage1 or info.stage2:
+            best += 25
+
+    return best
+
+
+def _attack_tactical_bonus(obs: Any, option: Any, profile: DeckProfile, cards: dict[int, CardInfo], attacks) -> float:
+    damage = _estimate_attack_damage(obs, option, profile, cards, attacks)
+    opponent = _active_pokemon(obs, _opponent_index(obs))
+    opponent_id = _card_id(opponent)
+    opponent_hp = _remaining_hp(opponent, cards)
+    prize_value = _prize_value(opponent_id, cards)
+
+    bonus = min(damage, 260) * 1.1
+    if opponent is not None and damage >= opponent_hp > 0:
+        bonus += 850 + prize_value * 360
+        if _int(_get(_player(obs, _opponent_index(obs)), "handCount", 0), 0) <= 2:
+            bonus += 120
+    elif opponent_hp > 0:
+        pressure_ratio = min(1.0, damage / opponent_hp) if damage > 0 else 0.0
+        bonus += pressure_ratio * 260
+
+    your_active = _active_pokemon(obs, _your_index(obs))
+    your_hp = _remaining_hp(your_active, cards)
+    threat = _estimate_visible_threat_damage(obs, _opponent_index(obs), profile, cards, attacks)
+    if threat >= your_hp > 0:
+        # When our Active is likely to fall, cash in damage/prizes now instead
+        # of taking another setup action that may never pay off.
+        bonus += 260 + _prize_value(_card_id(your_active), cards) * 70
+
+    return bonus
+
+
+def _any_attack_takes_prize(obs: Any, options: list[Any], profile: DeckProfile, cards: dict[int, CardInfo], attacks) -> bool:
+    opponent = _active_pokemon(obs, _opponent_index(obs))
+    opponent_hp = _remaining_hp(opponent, cards)
+    if opponent is None or opponent_hp <= 0:
+        return False
+    return any(
+        _int(_get(option, "type")) == OPT_ATTACK
+        and _estimate_attack_damage(obs, option, profile, cards, attacks) >= opponent_hp
+        for option in options
+    )
 
 
 def _preferred_energy_count(card_id: int | None, cards: dict[int, CardInfo], attacks) -> int:
@@ -604,6 +771,20 @@ def _boost_build_before_attack(
     active, active_energy, desired_energy, gap = _energy_gap_for_active(obs, cards, attacks)
     active_id = _card_id(active)
     if active_id is None:
+        return scored
+    if _any_attack_takes_prize(obs, options, profile, cards, attacks):
+        return scored
+    active_is_threatened = (
+        _estimate_visible_threat_damage(obs, _opponent_index(obs), profile, cards, attacks)
+        >= _remaining_hp(active, cards)
+        > 0
+    )
+    attack_can_pressure = any(
+        _int(_get(option, "type")) == OPT_ATTACK
+        and _estimate_attack_damage(obs, option, profile, cards, attacks) > 0
+        for option in options
+    )
+    if active_is_threatened and attack_can_pressure:
         return scored
 
     best_attack_score = max(attack_scores)
