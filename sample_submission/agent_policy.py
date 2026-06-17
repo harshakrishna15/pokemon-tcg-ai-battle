@@ -538,8 +538,7 @@ def _score_option(obs: Any, option: Any, profile: DeckProfile, cards: dict[int, 
         return 610 + _pokemon_value(card_id or 0, cards, profile.deck_counts) * 0.15
     if option_type == OPT_ATTACK:
         attack_id = _int(_get(option, "attackId"), -1)
-        attack = attacks.get(attack_id)
-        estimated_damage = _estimate_attack_damage(obs, option, profile, cards, attacks)
+        estimated_damage, attack = _estimate_attack_damage_and_source(obs, option, profile, cards, attacks)
         effective_damage = _effective_attack_damage(obs, option, profile, cards, attacks)
         progress_bonus = 0
         state = _state(obs)
@@ -797,6 +796,13 @@ def _attack_is_usable(attack: Any, active_energy: int) -> bool:
     return cost <= active_energy
 
 
+def _option_attack_for_active(active_info: CardInfo, option: Any, attacks) -> Any | None:
+    attack_id = _int(_get(option, "attackId"), -1)
+    if attack_id not in active_info.attack_ids:
+        return None
+    return attacks.get(attack_id)
+
+
 def _estimate_attack_damage_and_source(
     obs: Any,
     option: Any,
@@ -810,7 +816,7 @@ def _estimate_attack_damage_and_source(
     active_id = _card_id(active)
     active_info = _card_info(active_id or 0, cards)
     active_energy = _attached_energy_count(active)
-    attack = attacks.get(_int(_get(option, "attackId"), -1))
+    attack = _option_attack_for_active(active_info, option, attacks)
 
     if attack is not None:
         return _estimate_damage_from_attack(obs, attack, profile, cards, player_index), attack
@@ -912,7 +918,7 @@ def _estimate_visible_threat_damage(obs: Any, player_index: int, profile: DeckPr
 
 
 def _attack_tactical_bonus(obs: Any, option: Any, profile: DeckProfile, cards: dict[int, CardInfo], attacks) -> float:
-    raw_damage = _estimate_attack_damage(obs, option, profile, cards, attacks)
+    raw_damage, attack = _estimate_attack_damage_and_source(obs, option, profile, cards, attacks)
     damage = _effective_attack_damage(obs, option, profile, cards, attacks)
     opponent = _active_pokemon(obs, _opponent_index(obs))
     opponent_id = _card_id(opponent)
