@@ -42,3 +42,6 @@ coverage/
 *.log
 tmp/
 temp/
+
+# Submission build artifact (regenerate: cd sample_submission && tar -czf ../submission.tar.gz *)
+submission.tar.gz
