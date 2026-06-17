@@ -1,0 +1,20 @@
+{
+  "rank": 122,
+  "placement": 401,
+  "player": "Joseph Mandil",
+  "deck_name": "Lopunny Dudunsparce",
+  "points": 25,
+  "wins": 8,
+  "losses": 5,
+  "ties": 1,
+  "method_counts": {
+    "set_number": 47,
+    "name_fallback": 12,
+    "energy_fallback": 1
+  },
+  "unique_card_ids": 23,
+  "source": {
+    "tournament_id": "518",
+    "labs_event_id": "0070"
+  }
+}

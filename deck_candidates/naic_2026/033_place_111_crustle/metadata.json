@@ -1,0 +1,20 @@
+{
+  "rank": 33,
+  "placement": 111,
+  "player": "Darin O'Meara",
+  "deck_name": "Crustle",
+  "points": 29,
+  "wins": 9,
+  "losses": 3,
+  "ties": 2,
+  "method_counts": {
+    "set_number": 50,
+    "name_fallback": 9,
+    "energy_fallback": 1
+  },
+  "unique_card_ids": 25,
+  "source": {
+    "tournament_id": "518",
+    "labs_event_id": "0070"
+  }
+}

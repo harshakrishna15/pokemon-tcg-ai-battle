@@ -1,0 +1,20 @@
+{
+  "rank": 196,
+  "placement": 624,
+  "player": "Edward Babin",
+  "deck_name": "Lucario Hariyama",
+  "points": 20,
+  "wins": 6,
+  "losses": 6,
+  "ties": 2,
+  "method_counts": {
+    "set_number": 39,
+    "name_fallback": 11,
+    "energy_fallback": 10
+  },
+  "unique_card_ids": 21,
+  "source": {
+    "tournament_id": "518",
+    "labs_event_id": "0070"
+  }
+}

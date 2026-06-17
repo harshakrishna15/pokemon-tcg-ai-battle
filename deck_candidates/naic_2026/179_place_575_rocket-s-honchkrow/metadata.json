@@ -1,0 +1,19 @@
+{
+  "rank": 179,
+  "placement": 575,
+  "player": "Cory Hubka",
+  "deck_name": "Rocket's Honchkrow",
+  "points": 22,
+  "wins": 6,
+  "losses": 4,
+  "ties": 4,
+  "method_counts": {
+    "set_number": 56,
+    "name_fallback": 4
+  },
+  "unique_card_ids": 20,
+  "source": {
+    "tournament_id": "518",
+    "labs_event_id": "0070"
+  }
+}

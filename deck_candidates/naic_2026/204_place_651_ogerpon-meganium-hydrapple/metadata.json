@@ -1,0 +1,20 @@
+{
+  "rank": 204,
+  "placement": 651,
+  "player": "Matt Li",
+  "deck_name": "Ogerpon Meganium Hydrapple",
+  "points": 18,
+  "wins": 6,
+  "losses": 8,
+  "ties": 0,
+  "method_counts": {
+    "set_number": 39,
+    "name_fallback": 8,
+    "energy_fallback": 13
+  },
+  "unique_card_ids": 25,
+  "source": {
+    "tournament_id": "518",
+    "labs_event_id": "0070"
+  }
+}

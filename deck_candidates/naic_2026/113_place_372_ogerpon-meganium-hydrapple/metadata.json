@@ -1,0 +1,20 @@
+{
+  "rank": 113,
+  "placement": 372,
+  "player": "Justin Kim",
+  "deck_name": "Ogerpon Meganium Hydrapple",
+  "points": 25,
+  "wins": 8,
+  "losses": 5,
+  "ties": 1,
+  "method_counts": {
+    "set_number": 38,
+    "name_fallback": 8,
+    "energy_fallback": 14
+  },
+  "unique_card_ids": 24,
+  "source": {
+    "tournament_id": "518",
+    "labs_event_id": "0070"
+  }
+}

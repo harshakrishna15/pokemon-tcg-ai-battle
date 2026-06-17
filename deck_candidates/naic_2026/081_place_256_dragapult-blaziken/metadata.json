@@ -1,0 +1,20 @@
+{
+  "rank": 81,
+  "placement": 256,
+  "player": "Juan Mora",
+  "deck_name": "Dragapult Blaziken",
+  "points": 27,
+  "wins": 8,
+  "losses": 3,
+  "ties": 3,
+  "method_counts": {
+    "set_number": 39,
+    "name_fallback": 14,
+    "energy_fallback": 7
+  },
+  "unique_card_ids": 27,
+  "source": {
+    "tournament_id": "518",
+    "labs_event_id": "0070"
+  }
+}

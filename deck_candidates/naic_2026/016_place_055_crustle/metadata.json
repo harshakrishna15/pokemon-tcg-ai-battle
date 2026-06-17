@@ -1,0 +1,19 @@
+{
+  "rank": 16,
+  "placement": 55,
+  "player": "Cooper Kull",
+  "deck_name": "Crustle",
+  "points": 31,
+  "wins": 10,
+  "losses": 3,
+  "ties": 1,
+  "method_counts": {
+    "set_number": 50,
+    "name_fallback": 10
+  },
+  "unique_card_ids": 24,
+  "source": {
+    "tournament_id": "518",
+    "labs_event_id": "0070"
+  }
+}

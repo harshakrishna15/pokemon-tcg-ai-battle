@@ -1,0 +1,20 @@
+{
+  "rank": 192,
+  "placement": 614,
+  "player": "Alejandro Zeledon",
+  "deck_name": "Starmie Froslass",
+  "points": 20,
+  "wins": 6,
+  "losses": 6,
+  "ties": 2,
+  "method_counts": {
+    "set_number": 43,
+    "name_fallback": 10,
+    "energy_fallback": 7
+  },
+  "unique_card_ids": 28,
+  "source": {
+    "tournament_id": "518",
+    "labs_event_id": "0070"
+  }
+}

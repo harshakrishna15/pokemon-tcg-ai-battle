@@ -1,0 +1,20 @@
+{
+  "rank": 4,
+  "placement": 20,
+  "player": "Nicholas Cucinelli",
+  "deck_name": "Basic Box",
+  "points": 33,
+  "wins": 11,
+  "losses": 3,
+  "ties": 0,
+  "method_counts": {
+    "set_number": 32,
+    "name_fallback": 13,
+    "energy_fallback": 15
+  },
+  "unique_card_ids": 26,
+  "source": {
+    "tournament_id": "518",
+    "labs_event_id": "0070"
+  }
+}

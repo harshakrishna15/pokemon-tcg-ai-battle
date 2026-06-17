@@ -1,0 +1,20 @@
+{
+  "rank": 112,
+  "placement": 371,
+  "player": "Zach Negomir",
+  "deck_name": "Dragapult Dusknoir",
+  "points": 25,
+  "wins": 8,
+  "losses": 5,
+  "ties": 1,
+  "method_counts": {
+    "set_number": 31,
+    "name_fallback": 21,
+    "energy_fallback": 8
+  },
+  "unique_card_ids": 25,
+  "source": {
+    "tournament_id": "518",
+    "labs_event_id": "0070"
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "rank": 188,
+  "placement": 598,
+  "player": "Ryan McHenry",
+  "deck_name": "Cynthia's Garchomp",
+  "points": 21,
+  "wins": 6,
+  "losses": 5,
+  "ties": 3,
+  "method_counts": {
+    "set_number": 49,
+    "name_fallback": 7,
+    "energy_fallback": 4
+  },
+  "unique_card_ids": 23,
+  "source": {
+    "tournament_id": "518",
+    "labs_event_id": "0070"
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "rank": 195,
+  "placement": 623,
+  "player": "Douglas Dillin",
+  "deck_name": "Kangaskhan Bouffalant",
+  "points": 20,
+  "wins": 6,
+  "losses": 6,
+  "ties": 2,
+  "method_counts": {
+    "set_number": 43,
+    "name_fallback": 5,
+    "energy_fallback": 12
+  },
+  "unique_card_ids": 32,
+  "source": {
+    "tournament_id": "518",
+    "labs_event_id": "0070"
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "rank": 172,
+  "placement": 560,
+  "player": "Aaron Walker",
+  "deck_name": "Hop's Trevenant",
+  "points": 22,
+  "wins": 7,
+  "losses": 6,
+  "ties": 1,
+  "method_counts": {
+    "set_number": 51,
+    "name_fallback": 9
+  },
+  "unique_card_ids": 24,
+  "source": {
+    "tournament_id": "518",
+    "labs_event_id": "0070"
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "tournament": "NAIC 2026, New Orleans",
+  "tournament_id": "518",
+  "labs_event_id": "0070",
+  "sources": {
+    "decklists": "https://limitlesstcg.com/tournaments/518/decklists",
+    "standings": "https://labs.limitlesstcg.com/0070/standings"
+  },
+  "fetched_at_utc": "2026-06-17T07:13:32.910874+00:00",
+  "counts": {
+    "standings_rows": 3752,
+    "published_decklists": 675,
+    "decklist_card_rows": 16960,
+    "unmatched_decklists": 0,
+    "placement_fallback_decklists": 5,
+    "deck_total_cards": {
+      "60": 675
+    }
+  },
+  "output_files": {
+    "standings": "data/limitless/naic_2026/standings.csv.gz",
+    "decklist_cards": "data/limitless/naic_2026/decklist_cards.csv.gz",
+    "decklists_jsonl": "data/limitless/naic_2026/decklists.jsonl.gz",
+    "metadata": "data/limitless/naic_2026/metadata.json"
+  },
+  "notes": [
+    "Limitless publishes fewer full decklists than total tournament players.",
+    "Standings come from the embedded Limitless Labs standings payload.",
+    "Decklist card rows come from the Limitless tournament decklists page."
+  ]
+}

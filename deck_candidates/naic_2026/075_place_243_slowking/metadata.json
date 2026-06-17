@@ -1,0 +1,20 @@
+{
+  "rank": 75,
+  "placement": 243,
+  "player": "Ian Robb",
+  "deck_name": "Slowking",
+  "points": 27,
+  "wins": 9,
+  "losses": 5,
+  "ties": 0,
+  "method_counts": {
+    "set_number": 45,
+    "name_fallback": 9,
+    "energy_fallback": 6
+  },
+  "unique_card_ids": 26,
+  "source": {
+    "tournament_id": "518",
+    "labs_event_id": "0070"
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "rank": 206,
+  "placement": 662,
+  "player": "Tori Clendenin",
+  "deck_name": "Rocket's Mewtwo",
+  "points": 17,
+  "wins": 5,
+  "losses": 6,
+  "ties": 2,
+  "method_counts": {
+    "set_number": 46,
+    "name_fallback": 7,
+    "energy_fallback": 7
+  },
+  "unique_card_ids": 26,
+  "source": {
+    "tournament_id": "518",
+    "labs_event_id": "0070"
+  }
+}

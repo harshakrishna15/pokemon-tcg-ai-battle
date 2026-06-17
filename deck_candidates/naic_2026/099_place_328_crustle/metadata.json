@@ -1,0 +1,20 @@
+{
+  "rank": 99,
+  "placement": 328,
+  "player": "William Kiefer",
+  "deck_name": "Crustle",
+  "points": 26,
+  "wins": 7,
+  "losses": 2,
+  "ties": 5,
+  "method_counts": {
+    "set_number": 48,
+    "name_fallback": 10,
+    "energy_fallback": 2
+  },
+  "unique_card_ids": 26,
+  "source": {
+    "tournament_id": "518",
+    "labs_event_id": "0070"
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "rank": 193,
+  "placement": 617,
+  "player": "Alexandre Ouellette",
+  "deck_name": "Alakazam Dudunsparce",
+  "points": 20,
+  "wins": 6,
+  "losses": 6,
+  "ties": 2,
+  "method_counts": {
+    "set_number": 49,
+    "name_fallback": 9,
+    "energy_fallback": 2
+  },
+  "unique_card_ids": 27,
+  "source": {
+    "tournament_id": "518",
+    "labs_event_id": "0070"
+  }
+}

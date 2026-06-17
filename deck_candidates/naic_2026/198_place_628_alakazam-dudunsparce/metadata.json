@@ -1,0 +1,20 @@
+{
+  "rank": 198,
+  "placement": 628,
+  "player": "Yizhi Ren",
+  "deck_name": "Alakazam Dudunsparce",
+  "points": 19,
+  "wins": 6,
+  "losses": 6,
+  "ties": 1,
+  "method_counts": {
+    "set_number": 51,
+    "name_fallback": 8,
+    "energy_fallback": 1
+  },
+  "unique_card_ids": 27,
+  "source": {
+    "tournament_id": "518",
+    "labs_event_id": "0070"
+  }
+}

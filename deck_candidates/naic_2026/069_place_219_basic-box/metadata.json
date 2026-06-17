@@ -1,0 +1,20 @@
+{
+  "rank": 69,
+  "placement": 219,
+  "player": "Larry Bravo",
+  "deck_name": "Basic Box",
+  "points": 28,
+  "wins": 9,
+  "losses": 4,
+  "ties": 1,
+  "method_counts": {
+    "set_number": 33,
+    "name_fallback": 17,
+    "energy_fallback": 10
+  },
+  "unique_card_ids": 23,
+  "source": {
+    "tournament_id": "518",
+    "labs_event_id": "0070"
+  }
+}

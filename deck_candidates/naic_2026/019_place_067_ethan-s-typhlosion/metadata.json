@@ -1,0 +1,20 @@
+{
+  "rank": 19,
+  "placement": 67,
+  "player": "Gavin Chen",
+  "deck_name": "Ethan's Typhlosion",
+  "points": 31,
+  "wins": 10,
+  "losses": 3,
+  "ties": 1,
+  "method_counts": {
+    "set_number": 39,
+    "name_fallback": 16,
+    "energy_fallback": 5
+  },
+  "unique_card_ids": 29,
+  "source": {
+    "tournament_id": "518",
+    "labs_event_id": "0070"
+  }
+}

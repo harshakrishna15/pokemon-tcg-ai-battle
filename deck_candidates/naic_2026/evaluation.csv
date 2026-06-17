@@ -1,0 +1,21 @@
+rank,placement,player,deck_name,deck_file,games,wins,losses,draws,unfinished,errors,win_rate,non_draw_win_rate,avg_steps,median_steps,min_steps,max_steps
+18,63,Lorenzo Gomez,Crustle,/home/harsha/Developer/pokemon-tcg-ai-battle/deck_candidates/naic_2026/018_place_063_crustle/deck.csv,10,7,3,0,0,0,70.0,70.0,88.5,81.5,36,153
+4,20,Nicholas Cucinelli,Basic Box,/home/harsha/Developer/pokemon-tcg-ai-battle/deck_candidates/naic_2026/004_place_020_basic-box/deck.csv,10,5,5,0,0,0,50.0,50.0,101.1,109.0,49,134
+5,21,Aurora Viets,Dragapult,/home/harsha/Developer/pokemon-tcg-ai-battle/deck_candidates/naic_2026/005_place_021_dragapult/deck.csv,10,5,5,0,0,0,50.0,50.0,85.3,86.0,30,131
+14,52,Matthew Hubbard,Basic Box,/home/harsha/Developer/pokemon-tcg-ai-battle/deck_candidates/naic_2026/014_place_052_basic-box/deck.csv,10,5,5,0,0,0,50.0,50.0,85.2,87.5,23,139
+3,13,Natalie Millar,Dragapult Dusknoir,/home/harsha/Developer/pokemon-tcg-ai-battle/deck_candidates/naic_2026/003_place_013_dragapult-dusknoir/deck.csv,10,4,6,0,0,0,40.0,40.0,95.7,92.0,49,142
+16,55,Cooper Kull,Crustle,/home/harsha/Developer/pokemon-tcg-ai-battle/deck_candidates/naic_2026/016_place_055_crustle/deck.csv,10,4,6,0,0,0,40.0,40.0,108.4,102.5,69,163
+20,69,Edward Valencia,Crustle,/home/harsha/Developer/pokemon-tcg-ai-battle/deck_candidates/naic_2026/020_place_069_crustle/deck.csv,10,4,6,0,0,0,40.0,40.0,73.9,72.0,44,118
+6,23,Connor Cockerham,Lillie's Clefairy,/home/harsha/Developer/pokemon-tcg-ai-battle/deck_candidates/naic_2026/006_place_023_lillie-s-clefairy/deck.csv,10,3,7,0,0,0,30.0,30.0,97.9,87.5,57,155
+8,28,Ben Dobberstein,Ogerpon Meganium Hydrapple,/home/harsha/Developer/pokemon-tcg-ai-battle/deck_candidates/naic_2026/008_place_028_ogerpon-meganium-hydrapple/deck.csv,10,3,7,0,0,0,30.0,30.0,97.1,105.5,30,155
+9,34,Rowan Stavenow,Dragapult,/home/harsha/Developer/pokemon-tcg-ai-battle/deck_candidates/naic_2026/009_place_034_dragapult/deck.csv,10,3,7,0,0,0,30.0,30.0,117.3,133.0,65,162
+17,58,Adam Kalamat,Dragapult Blaziken,/home/harsha/Developer/pokemon-tcg-ai-battle/deck_candidates/naic_2026/017_place_058_dragapult-blaziken/deck.csv,10,3,7,0,0,0,30.0,30.0,134.6,145.5,89,167
+7,24,Isaac Alexander Martinez Mendoza,Slowking,/home/harsha/Developer/pokemon-tcg-ai-battle/deck_candidates/naic_2026/007_place_024_slowking/deck.csv,10,2,7,0,1,0,22.22222222222222,22.22222222222222,151.1,106.0,76,500
+1,1,James Kowalski,Lillie's Clefairy,/home/harsha/Developer/pokemon-tcg-ai-battle/deck_candidates/naic_2026/001_place_001_lillie-s-clefairy/deck.csv,10,2,8,0,0,0,20.0,20.0,110.2,103.0,62,190
+11,39,Daichi Shimada,Dragapult Dusknoir,/home/harsha/Developer/pokemon-tcg-ai-battle/deck_candidates/naic_2026/011_place_039_dragapult-dusknoir/deck.csv,10,2,8,0,0,0,20.0,20.0,86.1,93.0,26,131
+12,40,Öjvind Svinhufvud,N's Zoroark,/home/harsha/Developer/pokemon-tcg-ai-battle/deck_candidates/naic_2026/012_place_040_n-s-zoroark/deck.csv,10,2,8,0,0,0,20.0,20.0,119.6,118.0,87,149
+15,54,Calvin Connor,Alakazam Dudunsparce,/home/harsha/Developer/pokemon-tcg-ai-battle/deck_candidates/naic_2026/015_place_054_alakazam-dudunsparce/deck.csv,10,2,8,0,0,0,20.0,20.0,112.9,145.5,24,175
+2,4,Ross Cawthon,Slowking,/home/harsha/Developer/pokemon-tcg-ai-battle/deck_candidates/naic_2026/002_place_004_slowking/deck.csv,10,1,9,0,0,0,10.0,10.0,89.3,84.5,59,131
+10,36,Diego Cassiraga,Alakazam Dudunsparce,/home/harsha/Developer/pokemon-tcg-ai-battle/deck_candidates/naic_2026/010_place_036_alakazam-dudunsparce/deck.csv,10,1,9,0,0,0,10.0,10.0,130.4,132.5,68,174
+13,44,Matthew Burris,Dragapult Dusknoir,/home/harsha/Developer/pokemon-tcg-ai-battle/deck_candidates/naic_2026/013_place_044_dragapult-dusknoir/deck.csv,10,1,9,0,0,0,10.0,10.0,104.2,103.5,28,151
+19,67,Gavin Chen,Ethan's Typhlosion,/home/harsha/Developer/pokemon-tcg-ai-battle/deck_candidates/naic_2026/019_place_067_ethan-s-typhlosion/deck.csv,10,1,9,0,0,0,10.0,10.0,101.5,117.5,16,156

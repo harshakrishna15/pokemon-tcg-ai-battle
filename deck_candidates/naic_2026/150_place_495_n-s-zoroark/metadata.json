@@ -1,0 +1,20 @@
+{
+  "rank": 150,
+  "placement": 495,
+  "player": "Chad James",
+  "deck_name": "N's Zoroark",
+  "points": 23,
+  "wins": 7,
+  "losses": 5,
+  "ties": 2,
+  "method_counts": {
+    "set_number": 37,
+    "name_fallback": 15,
+    "energy_fallback": 8
+  },
+  "unique_card_ids": 23,
+  "source": {
+    "tournament_id": "518",
+    "labs_event_id": "0070"
+  }
+}

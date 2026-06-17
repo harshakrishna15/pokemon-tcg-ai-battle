@@ -1,0 +1,20 @@
+{
+  "rank": 49,
+  "placement": 164,
+  "player": "Leighton Catton",
+  "deck_name": "Festival Lead",
+  "points": 29,
+  "wins": 9,
+  "losses": 3,
+  "ties": 2,
+  "method_counts": {
+    "set_number": 50,
+    "name_fallback": 5,
+    "energy_fallback": 5
+  },
+  "unique_card_ids": 27,
+  "source": {
+    "tournament_id": "518",
+    "labs_event_id": "0070"
+  }
+}

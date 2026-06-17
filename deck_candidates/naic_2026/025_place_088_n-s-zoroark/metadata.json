@@ -1,0 +1,20 @@
+{
+  "rank": 25,
+  "placement": 88,
+  "player": "Hermanni Hietalahti",
+  "deck_name": "N's Zoroark",
+  "points": 30,
+  "wins": 10,
+  "losses": 4,
+  "ties": 0,
+  "method_counts": {
+    "set_number": 38,
+    "name_fallback": 13,
+    "energy_fallback": 9
+  },
+  "unique_card_ids": 23,
+  "source": {
+    "tournament_id": "518",
+    "labs_event_id": "0070"
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "rank": 20,
+  "placement": 69,
+  "player": "Edward Valencia",
+  "deck_name": "Crustle",
+  "points": 31,
+  "wins": 10,
+  "losses": 3,
+  "ties": 1,
+  "method_counts": {
+    "set_number": 50,
+    "name_fallback": 6,
+    "energy_fallback": 4
+  },
+  "unique_card_ids": 27,
+  "source": {
+    "tournament_id": "518",
+    "labs_event_id": "0070"
+  }
+}

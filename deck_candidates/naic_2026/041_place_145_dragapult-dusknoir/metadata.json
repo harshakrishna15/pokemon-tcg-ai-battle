@@ -1,0 +1,20 @@
+{
+  "rank": 41,
+  "placement": 145,
+  "player": "Jason Yip",
+  "deck_name": "Dragapult Dusknoir",
+  "points": 29,
+  "wins": 9,
+  "losses": 3,
+  "ties": 2,
+  "method_counts": {
+    "set_number": 31,
+    "name_fallback": 21,
+    "energy_fallback": 8
+  },
+  "unique_card_ids": 25,
+  "source": {
+    "tournament_id": "518",
+    "labs_event_id": "0070"
+  }
+}

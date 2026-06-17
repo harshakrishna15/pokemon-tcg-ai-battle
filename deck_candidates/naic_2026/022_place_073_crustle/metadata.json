@@ -1,0 +1,20 @@
+{
+  "rank": 22,
+  "placement": 73,
+  "player": "Evan Bryant",
+  "deck_name": "Crustle",
+  "points": 31,
+  "wins": 9,
+  "losses": 1,
+  "ties": 4,
+  "method_counts": {
+    "set_number": 49,
+    "name_fallback": 10,
+    "energy_fallback": 1
+  },
+  "unique_card_ids": 25,
+  "source": {
+    "tournament_id": "518",
+    "labs_event_id": "0070"
+  }
+}

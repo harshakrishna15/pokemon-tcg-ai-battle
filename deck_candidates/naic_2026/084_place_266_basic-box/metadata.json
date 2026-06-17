@@ -1,0 +1,20 @@
+{
+  "rank": 84,
+  "placement": 266,
+  "player": "Fernando Lopez",
+  "deck_name": "Basic Box",
+  "points": 27,
+  "wins": 9,
+  "losses": 5,
+  "ties": 0,
+  "method_counts": {
+    "set_number": 36,
+    "name_fallback": 12,
+    "energy_fallback": 12
+  },
+  "unique_card_ids": 31,
+  "source": {
+    "tournament_id": "518",
+    "labs_event_id": "0070"
+  }
+}

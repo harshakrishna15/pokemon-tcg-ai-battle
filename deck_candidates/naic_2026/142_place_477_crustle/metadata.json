@@ -1,0 +1,20 @@
+{
+  "rank": 142,
+  "placement": 477,
+  "player": "Dan Benipayo",
+  "deck_name": "Crustle",
+  "points": 23,
+  "wins": 5,
+  "losses": 1,
+  "ties": 8,
+  "method_counts": {
+    "set_number": 49,
+    "name_fallback": 10,
+    "energy_fallback": 1
+  },
+  "unique_card_ids": 24,
+  "source": {
+    "tournament_id": "518",
+    "labs_event_id": "0070"
+  }
+}

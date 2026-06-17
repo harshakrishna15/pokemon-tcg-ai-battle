@@ -1,0 +1,20 @@
+{
+  "rank": 117,
+  "placement": 383,
+  "player": "Asher Campbell",
+  "deck_name": "Raging Bolt Ogerpon",
+  "points": 25,
+  "wins": 8,
+  "losses": 5,
+  "ties": 1,
+  "method_counts": {
+    "set_number": 32,
+    "name_fallback": 14,
+    "energy_fallback": 14
+  },
+  "unique_card_ids": 27,
+  "source": {
+    "tournament_id": "518",
+    "labs_event_id": "0070"
+  }
+}

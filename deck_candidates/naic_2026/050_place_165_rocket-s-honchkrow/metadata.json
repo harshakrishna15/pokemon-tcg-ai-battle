@@ -1,0 +1,19 @@
+{
+  "rank": 50,
+  "placement": 165,
+  "player": "Alfredo Manzanares",
+  "deck_name": "Rocket's Honchkrow",
+  "points": 29,
+  "wins": 9,
+  "losses": 3,
+  "ties": 2,
+  "method_counts": {
+    "set_number": 58,
+    "name_fallback": 2
+  },
+  "unique_card_ids": 20,
+  "source": {
+    "tournament_id": "518",
+    "labs_event_id": "0070"
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "rank": 162,
+  "placement": 526,
+  "player": "Adam Reinhardt",
+  "deck_name": "Sharpedo Toxtricity",
+  "points": 23,
+  "wins": 5,
+  "losses": 1,
+  "ties": 8,
+  "method_counts": {
+    "set_number": 36,
+    "name_fallback": 15,
+    "energy_fallback": 9
+  },
+  "unique_card_ids": 24,
+  "source": {
+    "tournament_id": "518",
+    "labs_event_id": "0070"
+  }
+}

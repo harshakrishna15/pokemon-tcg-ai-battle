@@ -1,0 +1,19 @@
+{
+  "rank": 202,
+  "placement": 646,
+  "player": "Isaac Rickert",
+  "deck_name": "Rocket's Honchkrow",
+  "points": 19,
+  "wins": 6,
+  "losses": 6,
+  "ties": 1,
+  "method_counts": {
+    "set_number": 57,
+    "name_fallback": 3
+  },
+  "unique_card_ids": 19,
+  "source": {
+    "tournament_id": "518",
+    "labs_event_id": "0070"
+  }
+}

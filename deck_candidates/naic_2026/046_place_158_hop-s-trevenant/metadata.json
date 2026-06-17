@@ -1,0 +1,19 @@
+{
+  "rank": 46,
+  "placement": 158,
+  "player": "Matt Walter",
+  "deck_name": "Hop's Trevenant",
+  "points": 29,
+  "wins": 9,
+  "losses": 3,
+  "ties": 2,
+  "method_counts": {
+    "set_number": 51,
+    "name_fallback": 9
+  },
+  "unique_card_ids": 24,
+  "source": {
+    "tournament_id": "518",
+    "labs_event_id": "0070"
+  }
+}

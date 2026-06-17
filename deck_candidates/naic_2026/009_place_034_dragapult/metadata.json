@@ -1,0 +1,20 @@
+{
+  "rank": 9,
+  "placement": 34,
+  "player": "Rowan Stavenow",
+  "deck_name": "Dragapult",
+  "points": 32,
+  "wins": 10,
+  "losses": 2,
+  "ties": 2,
+  "method_counts": {
+    "set_number": 34,
+    "name_fallback": 17,
+    "energy_fallback": 9
+  },
+  "unique_card_ids": 23,
+  "source": {
+    "tournament_id": "518",
+    "labs_event_id": "0070"
+  }
+}

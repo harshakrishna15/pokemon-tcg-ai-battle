@@ -1,0 +1,20 @@
+{
+  "rank": 169,
+  "placement": 552,
+  "player": "Cobi Kawasaki",
+  "deck_name": "Slowking",
+  "points": 22,
+  "wins": 7,
+  "losses": 6,
+  "ties": 1,
+  "method_counts": {
+    "set_number": 47,
+    "name_fallback": 10,
+    "energy_fallback": 3
+  },
+  "unique_card_ids": 27,
+  "source": {
+    "tournament_id": "518",
+    "labs_event_id": "0070"
+  }
+}

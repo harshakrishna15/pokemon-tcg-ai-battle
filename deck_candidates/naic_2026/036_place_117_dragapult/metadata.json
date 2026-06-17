@@ -1,0 +1,20 @@
+{
+  "rank": 36,
+  "placement": 117,
+  "player": "Riley McKay",
+  "deck_name": "Dragapult",
+  "points": 29,
+  "wins": 9,
+  "losses": 3,
+  "ties": 2,
+  "method_counts": {
+    "set_number": 33,
+    "name_fallback": 18,
+    "energy_fallback": 9
+  },
+  "unique_card_ids": 22,
+  "source": {
+    "tournament_id": "518",
+    "labs_event_id": "0070"
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "rank": 26,
+  "placement": 91,
+  "player": "Taylor Cook",
+  "deck_name": "Ceruledge",
+  "points": 30,
+  "wins": 10,
+  "losses": 4,
+  "ties": 0,
+  "method_counts": {
+    "set_number": 28,
+    "name_fallback": 12,
+    "energy_fallback": 20
+  },
+  "unique_card_ids": 16,
+  "source": {
+    "tournament_id": "518",
+    "labs_event_id": "0070"
+  }
+}

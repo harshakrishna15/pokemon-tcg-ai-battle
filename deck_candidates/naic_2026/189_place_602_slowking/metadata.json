@@ -1,0 +1,20 @@
+{
+  "rank": 189,
+  "placement": 602,
+  "player": "Nicholas Gill",
+  "deck_name": "Slowking",
+  "points": 21,
+  "wins": 6,
+  "losses": 5,
+  "ties": 3,
+  "method_counts": {
+    "set_number": 47,
+    "name_fallback": 10,
+    "energy_fallback": 3
+  },
+  "unique_card_ids": 27,
+  "source": {
+    "tournament_id": "518",
+    "labs_event_id": "0070"
+  }
+}

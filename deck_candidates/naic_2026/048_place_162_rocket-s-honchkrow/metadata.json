@@ -1,0 +1,19 @@
+{
+  "rank": 48,
+  "placement": 162,
+  "player": "Jerome Pelletier",
+  "deck_name": "Rocket's Honchkrow",
+  "points": 29,
+  "wins": 9,
+  "losses": 3,
+  "ties": 2,
+  "method_counts": {
+    "set_number": 56,
+    "name_fallback": 4
+  },
+  "unique_card_ids": 19,
+  "source": {
+    "tournament_id": "518",
+    "labs_event_id": "0070"
+  }
+}

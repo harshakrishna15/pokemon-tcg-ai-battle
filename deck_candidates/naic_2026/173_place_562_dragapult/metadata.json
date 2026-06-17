@@ -1,0 +1,20 @@
+{
+  "rank": 173,
+  "placement": 562,
+  "player": "Luke Miller",
+  "deck_name": "Dragapult",
+  "points": 22,
+  "wins": 7,
+  "losses": 6,
+  "ties": 1,
+  "method_counts": {
+    "set_number": 35,
+    "name_fallback": 16,
+    "energy_fallback": 9
+  },
+  "unique_card_ids": 24,
+  "source": {
+    "tournament_id": "518",
+    "labs_event_id": "0070"
+  }
+}

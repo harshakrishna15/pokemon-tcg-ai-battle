@@ -1,0 +1,20 @@
+{
+  "rank": 29,
+  "placement": 102,
+  "player": "Justin Blanchard",
+  "deck_name": "Crustle",
+  "points": 30,
+  "wins": 9,
+  "losses": 2,
+  "ties": 3,
+  "method_counts": {
+    "set_number": 50,
+    "name_fallback": 9,
+    "energy_fallback": 1
+  },
+  "unique_card_ids": 25,
+  "source": {
+    "tournament_id": "518",
+    "labs_event_id": "0070"
+  }
+}

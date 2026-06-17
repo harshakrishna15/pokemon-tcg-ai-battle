@@ -1,0 +1,20 @@
+{
+  "rank": 207,
+  "placement": 667,
+  "player": "Wyatt Sutton",
+  "deck_name": "Lucario Hariyama",
+  "points": 16,
+  "wins": 5,
+  "losses": 5,
+  "ties": 1,
+  "method_counts": {
+    "set_number": 39,
+    "name_fallback": 14,
+    "energy_fallback": 7
+  },
+  "unique_card_ids": 26,
+  "source": {
+    "tournament_id": "518",
+    "labs_event_id": "0070"
+  }
+}
