@@ -32,7 +32,7 @@ def card(card_id):
     return {"id": card_id, "serial": card_id * 100, "playerIndex": 0}
 
 
-def pokemon(card_id, hp=100, energy_count=0):
+def pokemon(card_id, hp=100, energy_count=0, energy_id=3):
     return {
         "id": card_id,
         "serial": card_id * 100,
@@ -40,8 +40,8 @@ def pokemon(card_id, hp=100, energy_count=0):
         "hp": hp,
         "maxHp": hp,
         "appearThisTurn": False,
-        "energies": [3] * energy_count,
-        "energyCards": [card(3) for _ in range(energy_count)],
+        "energies": [energy_id] * energy_count,
+        "energyCards": [card(energy_id) for _ in range(energy_count)],
         "tools": [],
         "preEvolution": [],
     }
@@ -66,13 +66,13 @@ def base_obs(select):
             "players": [
                 {
                     "active": [pokemon(721, 150)],
-                    "bench": [pokemon(722, 90)],
+                    "bench": [pokemon(1030, 70)],
                     "benchMax": 5,
                     "deckCount": 45,
                     "discard": [],
                     "prize": [],
                     "handCount": 4,
-                    "hand": [card(723), card(3), card(1145), card(1227)],
+                    "hand": [card(1031), card(3), card(1145), card(1227)],
                     "poisoned": False,
                     "burned": False,
                     "asleep": False,
@@ -107,7 +107,7 @@ class AgentPolicyTests(unittest.TestCase):
         self.assertEqual(choose_action({"select": None}, self.deck), self.deck)
         self.assertEqual(len(self.deck), 60)
 
-    def test_setup_active_prefers_non_ex_basic_attacker(self):
+    def test_setup_active_prefers_durable_basic_attacker(self):
         obs = base_obs(
             {
                 "type": SEL_CARD,
@@ -124,8 +124,8 @@ class AgentPolicyTests(unittest.TestCase):
                 "effect": None,
             }
         )
-        obs["current"]["players"][0]["hand"] = [card(722), card(154), card(721)]
-        self.assertEqual(choose_action(obs, self.deck), [2])
+        obs["current"]["players"][0]["hand"] = [card(1030), card(154), card(721)]
+        self.assertEqual(choose_action(obs, self.deck), [1])
 
     def test_main_phase_prefers_evolution_before_attack(self):
         obs = base_obs(
@@ -165,7 +165,7 @@ class AgentPolicyTests(unittest.TestCase):
                     {"type": OPT_CARD, "area": AREA_DECK, "index": 1, "playerIndex": 0},
                     {"type": OPT_CARD, "area": AREA_DECK, "index": 2, "playerIndex": 0},
                 ],
-                "deck": [card(3), card(723), card(1227)],
+                "deck": [card(3), card(1031), card(1227)],
                 "contextCard": None,
                 "effect": None,
             }
@@ -191,7 +191,7 @@ class AgentPolicyTests(unittest.TestCase):
                 "effect": None,
             }
         )
-        obs["current"]["players"][0]["hand"] = [card(723), card(3), card(3), card(1227)]
+        obs["current"]["players"][0]["hand"] = [card(1031), card(3), card(3), card(1227)]
         self.assertEqual(choose_action(obs, self.deck), [1, 2])
 
     def test_attach_targets_best_attacker(self):
@@ -225,7 +225,7 @@ class AgentPolicyTests(unittest.TestCase):
             }
         )
         obs["current"]["players"][0]["active"] = [pokemon(721, 150)]
-        obs["current"]["players"][0]["bench"] = [pokemon(723, 350)]
+        obs["current"]["players"][0]["bench"] = [pokemon(1031, 330)]
         self.assertEqual(choose_action(obs, self.deck), [1])
 
     def test_main_phase_uses_search_before_end(self):
@@ -434,6 +434,56 @@ class AgentPolicyTests(unittest.TestCase):
         obs["current"]["players"][0]["hand"] = [card(1235), card(3), card(1227)]
         obs["current"]["players"][1]["active"] = [pokemon(154, 220, energy_count=5)]
         self.assertEqual(choose_action(obs, self.deck), [2])
+
+    def test_moltres_takes_fire_weak_grass_ex_prize(self):
+        obs = base_obs(
+            {
+                "type": 0,
+                "context": 0,
+                "minCount": 1,
+                "maxCount": 1,
+                "option": [
+                    {
+                        "type": OPT_ATTACH,
+                        "area": AREA_HAND,
+                        "index": 0,
+                        "playerIndex": 0,
+                        "inPlayArea": AREA_ACTIVE,
+                        "inPlayIndex": 0,
+                    },
+                    {"type": OPT_ATTACK, "attackId": 999},
+                ],
+                "deck": None,
+                "contextCard": None,
+                "effect": None,
+            }
+        )
+        obs["current"]["players"][0]["active"] = [pokemon(791, 120, energy_count=1, energy_id=2)]
+        obs["current"]["players"][0]["hand"] = [card(2), card(1227)]
+        obs["current"]["players"][1]["active"] = [pokemon(96, 210)]
+        self.assertEqual(choose_action(obs, self.deck), [1])
+
+    def test_miraidon_takes_lightning_weak_water_ex_prize(self):
+        obs = base_obs(
+            {
+                "type": 0,
+                "context": 0,
+                "minCount": 1,
+                "maxCount": 1,
+                "option": [
+                    {"type": OPT_PLAY, "index": 1},
+                    {"type": OPT_ATTACK, "attackId": 999},
+                    {"type": OPT_END},
+                ],
+                "deck": None,
+                "contextCard": None,
+                "effect": None,
+            }
+        )
+        obs["current"]["players"][0]["active"] = [pokemon(957, 220, energy_count=3, energy_id=4)]
+        obs["current"]["players"][0]["hand"] = [card(4), card(1227)]
+        obs["current"]["players"][1]["active"] = [pokemon(1031, 330)]
+        self.assertEqual(choose_action(obs, self.deck), [1])
 
 
 if __name__ == "__main__":
