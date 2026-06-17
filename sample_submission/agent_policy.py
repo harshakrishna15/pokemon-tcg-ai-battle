@@ -149,6 +149,17 @@ class DeckProfile:
     evolves_from_name: dict[str, tuple[int, ...]]
 
 
+@dataclass(frozen=True)
+class ThreatMap:
+    """Visible next-turn pressure from the opponent's board."""
+
+    damage_to_active: int = 0
+    active_damage_to_active: int = 0
+    bench_damage_to_active: int = 0
+    max_source_prize_value: int = 1
+    can_ko_active: bool = False
+
+
 def _card_info(card_id: int, cards: dict[int, CardInfo]) -> CardInfo:
     return cards.get(card_id, CardInfo(card_id, f"Card {card_id}"))
 
@@ -398,6 +409,230 @@ def _bench_space(obs: Any) -> int:
     return max(0, bench_max - len(bench))
 
 
+def _estimated_your_deck_ids(
+    obs: Any,
+    deck: list[int] | None,
+    profile: DeckProfile,
+    cards: dict[int, CardInfo],
+) -> list[int]:
+    if not deck:
+        return []
+    your_deck, _, _, _, _, _ = _predict_hidden_zones(obs, deck, profile, cards)
+    return your_deck
+
+
+def _visible_your_ids(obs: Any) -> set[int]:
+    visible = set(_your_hand_ids(obs))
+    visible.update(_your_field_ids(obs))
+    visible.update(_card_id(card) for card in _cards_in_area(obs, AREA_DISCARD, _your_index(obs)))
+    visible.update(_known_prize_ids(obs, _your_index(obs)))
+    visible.discard(None)
+    return visible
+
+
+def _best_energy_target_need(
+    obs: Any,
+    energy_type: str | None,
+    profile: DeckProfile,
+    cards: dict[int, CardInfo],
+    attacks,
+) -> float:
+    if energy_type is None:
+        return 0.0
+
+    best = 0.0
+    for pokemon in _pokemon_in_play(obs, _your_index(obs)):
+        card_id = _card_id(pokemon)
+        info = _card_info(card_id or 0, cards)
+        desired = _preferred_energy_count(card_id, cards, attacks)
+        gap = max(0, desired - _attached_energy_count(pokemon))
+        if gap <= 0:
+            continue
+
+        value = 130 + min(gap, 3) * 85
+        value += _pokemon_value(card_id or 0, cards, profile.deck_counts) * 0.12
+        if info.energy_type == energy_type:
+            value += 150
+        if pokemon is _your_active_pokemon(obs):
+            value += 70
+        best = max(best, value)
+
+    return best
+
+
+def _card_need_value(
+    obs: Any,
+    card_id: int,
+    profile: DeckProfile,
+    cards: dict[int, CardInfo],
+    attacks,
+) -> float:
+    info = _card_info(card_id, cards)
+    visible_ids = _visible_your_ids(obs)
+    hand_ids = set(_your_hand_ids(obs))
+    field_ids = set(_your_field_ids(obs))
+    value = 0.0
+
+    if info.kind == "basic_energy":
+        value = _best_energy_target_need(obs, info.energy_type, profile, cards, attacks)
+        if card_id in profile.main_energy_ids:
+            value += 70
+        return value
+
+    if info.is_pokemon:
+        pokemon_value = _pokemon_value(card_id, cards, profile.deck_counts)
+        if card_id in profile.evolution_ids and card_id not in hand_ids and _has_evolution_source_in_play(obs, profile, cards):
+            value = max(value, 680 + pokemon_value * 0.45 + _matchup_bonus(obs, card_id, cards))
+        if info.basic and _bench_space(obs) > 0 and card_id not in field_ids:
+            value = max(value, 380 + _starter_value(card_id, cards, profile.deck_counts) * 0.35)
+        if card_id in profile.attacker_ids[:4] and card_id not in field_ids:
+            value = max(value, 430 + pokemon_value * 0.35 + _matchup_bonus(obs, card_id, cards))
+        if card_id in visible_ids:
+            value *= 0.45
+        return value
+
+    roles = _role(card_id, info)
+    hand_count = len(_your_hand_ids(obs))
+    if "search" in roles and (_missing_evolution_piece(obs, profile) or _bench_space(obs) > 0):
+        value = max(value, 230)
+    if "draw" in roles and hand_count <= 4:
+        value = max(value, 260 - hand_count * 25)
+    if "energy_accel" in roles:
+        active = _your_active_pokemon(obs)
+        active_info = _card_info(_card_id(active) or 0, cards)
+        value = max(value, _best_energy_target_need(obs, active_info.energy_type, profile, cards, attacks) * 0.45)
+
+    return value
+
+
+def _expected_draw_value(
+    obs: Any,
+    deck: list[int] | None,
+    profile: DeckProfile,
+    cards: dict[int, CardInfo],
+    attacks,
+    draw_count: int,
+) -> float:
+    deck_ids = _estimated_your_deck_ids(obs, deck, profile, cards)
+    deck_size = len(deck_ids)
+    if deck_size <= 0 or draw_count <= 0:
+        return 0.0
+
+    draw_count = min(draw_count, deck_size)
+    hit_rate = draw_count / deck_size
+    expected = sum(_card_need_value(obs, card_id, profile, cards, attacks) * hit_rate for card_id in deck_ids)
+    hand_count = len(_your_hand_ids(obs))
+    if hand_count <= 2:
+        expected += 150
+    elif hand_count <= 4:
+        expected += 80
+    return min(expected, 620)
+
+
+def _estimated_draw_count_for_card(info: CardInfo) -> int:
+    text = f"{info.name} {info.effect_text}".lower()
+    if "top six" in text or "six cards" in text:
+        return 6
+    if "shuffle your hand" in text:
+        return 5
+    if "draw cards" in text or "draw" in text:
+        return 3
+    return 0
+
+
+def _search_target_ids_for_card(
+    search_card: CardInfo,
+    deck_ids: list[int],
+    cards: dict[int, CardInfo],
+) -> list[int]:
+    text = f"{search_card.name} {search_card.effect_text}".lower()
+    targets: list[int] = []
+    for card_id in sorted(set(deck_ids)):
+        info = _card_info(card_id, cards)
+        if "basic energy" in text and info.kind == "basic_energy":
+            targets.append(card_id)
+        elif "mega" in text and info.mega_ex:
+            targets.append(card_id)
+        elif "basic pokemon with 70 hp or less" in text and info.basic and info.hp <= 70:
+            targets.append(card_id)
+        elif "pokemon" in text and info.is_pokemon:
+            targets.append(card_id)
+    return targets
+
+
+def _expected_search_value(
+    obs: Any,
+    card_id: int,
+    deck: list[int] | None,
+    profile: DeckProfile,
+    cards: dict[int, CardInfo],
+    attacks,
+) -> float:
+    deck_ids = _estimated_your_deck_ids(obs, deck, profile, cards)
+    if not deck_ids:
+        return 0.0
+
+    info = _card_info(card_id, cards)
+    targets = _search_target_ids_for_card(info, deck_ids, cards)
+    if not targets:
+        return 0.0
+
+    target_values = sorted(
+        (_card_need_value(obs, target_id, profile, cards, attacks) for target_id in targets),
+        reverse=True,
+    )
+    if not target_values:
+        return 0.0
+
+    text = f"{info.name} {info.effect_text}".lower()
+    take = 2 if "up to 2" in text else 1
+    if "bench" in text:
+        take = min(take, _bench_space(obs))
+        if take <= 0:
+            return 0.0
+    value = sum(target_values[: max(1, take)])
+    if "discard two cards" in text:
+        value -= 140
+    return min(max(0.0, value), 760)
+
+
+def _expected_energy_accel_value(
+    obs: Any,
+    card_id: int,
+    deck: list[int] | None,
+    profile: DeckProfile,
+    cards: dict[int, CardInfo],
+    attacks,
+) -> float:
+    deck_ids = _estimated_your_deck_ids(obs, deck, profile, cards)
+    info = _card_info(card_id, cards)
+    text = f"{info.name} {info.effect_text}".lower()
+    energy_ids = [cid for cid in deck_ids if _card_info(cid, cards).kind == "basic_energy"]
+    if not energy_ids:
+        return 0.0
+
+    best_need = 0.0
+    for energy_id in set(energy_ids):
+        energy = _card_info(energy_id, cards)
+        best_need = max(best_need, _best_energy_target_need(obs, energy.energy_type, profile, cards, attacks))
+
+    if best_need <= 0:
+        return 0.0
+
+    if "two different basic energy" in text:
+        different_types = {_card_info(cid, cards).energy_type for cid in energy_ids}
+        if len(different_types) < 2:
+            return best_need * 0.25
+        return min(620, 180 + best_need)
+
+    if "top six" in text:
+        deck_size = max(1, len(deck_ids))
+        miss_rate = max(0.0, 1.0 - len(energy_ids) / deck_size) ** min(6, deck_size)
+        return min(600, (1.0 - miss_rate) * (190 + best_need))
+
+    return min(520, best_need * 0.75)
+
+
 def _role(card_id: int, info: CardInfo) -> set[str]:
     # Keyword roles are deliberately broad. They make unknown trainer cards
     # useful without needing a custom branch for every card name.
@@ -418,7 +653,14 @@ def _role(card_id: int, info: CardInfo) -> set[str]:
     return roles
 
 
-def _score_play_card(obs: Any, card_id: int | None, profile: DeckProfile, cards: dict[int, CardInfo]) -> float:
+def _score_play_card(
+    obs: Any,
+    card_id: int | None,
+    profile: DeckProfile,
+    cards: dict[int, CardInfo],
+    attacks,
+    deck: list[int] | None = None,
+) -> float:
     # Main-phase play scoring rewards setup first, then search/draw/energy
     # acceleration. Supporters get a small tax because only one can be used.
     if card_id is None:
@@ -435,22 +677,34 @@ def _score_play_card(obs: Any, card_id: int | None, profile: DeckProfile, cards:
     score = 150.0
 
     if "energy_accel" in roles:
-        score = max(score, 690)
+        score = max(score, 360 + _expected_energy_accel_value(obs, card_id, deck, profile, cards, attacks))
     if "search" in roles:
-        score = max(score, 720 if _missing_evolution_piece(obs, profile) else 540)
+        search_value = _expected_search_value(obs, card_id, deck, profile, cards, attacks)
+        score = max(score, 330 + search_value)
         if _has_evolution_source_in_play(obs, profile, cards):
             score += 60
     if "draw" in roles:
+        draw_count = _estimated_draw_count_for_card(info)
+        draw_value = _expected_draw_value(
+            obs,
+            deck,
+            profile,
+            cards,
+            attacks,
+            draw_count,
+        )
+        deck_count = _int(_get(_player(obs), "deckCount", 0), 0)
+        draw_risk = 650 if draw_count > 0 and deck_count <= draw_count <= 6 else 0
         if hand_count <= 3:
-            score = max(score, 650)
+            score = max(score, 420 + draw_value - draw_risk)
         elif hand_count <= 6:
-            score = max(score, 510)
+            score = max(score, 300 + draw_value - draw_risk)
         else:
-            score = max(score, 260)
+            score = max(score, 180 + draw_value * 0.55 - draw_risk)
     if "damage_boost" in roles:
         score = max(score, 520)
     if "gust" in roles:
-        score = max(score, 330)
+        score = max(score, 210 + _gust_expected_value(obs, profile, cards, attacks))
     if "switch" in roles:
         score = max(score, 230)
 
@@ -459,7 +713,13 @@ def _score_play_card(obs: Any, card_id: int | None, profile: DeckProfile, cards:
     return score
 
 
-def _score_card_pick(obs: Any, card_id: int | None, profile: DeckProfile, cards: dict[int, CardInfo]) -> float:
+def _score_card_pick(
+    obs: Any,
+    card_id: int | None,
+    profile: DeckProfile,
+    cards: dict[int, CardInfo],
+    attacks=None,
+) -> float:
     if card_id is None:
         return 0
     info = _card_info(card_id, cards)
@@ -484,10 +744,17 @@ def _score_card_pick(obs: Any, card_id: int | None, profile: DeckProfile, cards:
         return 430
     if "draw" in _role(card_id, info):
         return 390
+    if info.kind == "basic_energy" and attacks is not None:
+        need = _best_energy_target_need(obs, info.energy_type, profile, cards, attacks)
+        if need > 0:
+            score = 160 + need
+            if card_id in profile.main_energy_ids:
+                score += 70
+            return score
     if card_id in profile.main_energy_ids:
         return 250
     if card_id in profile.basic_energy_ids:
-        return 210
+        return 120
     return 100
 
 
@@ -520,20 +787,33 @@ def _discard_penalty(obs: Any, card_id: int | None, profile: DeckProfile, cards:
     return penalty
 
 
-def _score_option(obs: Any, option: Any, profile: DeckProfile, cards: dict[int, CardInfo], attacks) -> float:
+def _score_option(
+    obs: Any,
+    option: Any,
+    profile: DeckProfile,
+    cards: dict[int, CardInfo],
+    attacks,
+    deck: list[int] | None = None,
+) -> float:
     # Convert each legal option into a single comparable score. The simulator
     # still enforces legality; this only chooses among legal indexes.
     option_type = _int(_get(option, "type"))
     card_id = _resolve_option_card_id(obs, option)
 
     if option_type == OPT_EVOLVE:
-        return 920 + _score_card_pick(obs, card_id, profile, cards)
+        return 920 + _score_card_pick(obs, card_id, profile, cards, attacks)
     if option_type == OPT_ATTACH:
         target_id = _resolve_target_pokemon_id(obs, option)
+        target = _resolve_target_pokemon(obs, option)
         energy_bonus = _attach_energy_bonus(obs, card_id, target_id, profile, cards)
-        return 760 + energy_bonus + _pokemon_value(target_id or 0, cards, profile.deck_counts) * 0.3
+        return (
+            760
+            + energy_bonus
+            + _pokemon_value(target_id or 0, cards, profile.deck_counts) * 0.3
+            + _attachment_progress_bonus(obs, card_id, target, profile, cards, attacks)
+        )
     if option_type == OPT_PLAY:
-        return _score_play_card(obs, card_id, profile, cards)
+        return _score_play_card(obs, card_id, profile, cards, attacks, deck)
     if option_type == OPT_ABILITY:
         return 610 + _pokemon_value(card_id or 0, cards, profile.deck_counts) * 0.15
     if option_type == OPT_ATTACK:
@@ -560,7 +840,9 @@ def _score_option(obs: Any, option: Any, profile: DeckProfile, cards: dict[int, 
     if option_type == OPT_RETREAT:
         return 210
     if option_type == OPT_CARD:
-        return _score_card_pick(obs, card_id, profile, cards)
+        if _int(_get(_select(obs), "context")) == CTX_ATTACH_TO:
+            return _attachment_target_value(obs, _resolve_target_pokemon(obs, option), profile, cards, attacks)
+        return _score_card_pick(obs, card_id, profile, cards, attacks)
     if option_type == OPT_NUMBER:
         return _int(_get(option, "number"), 0)
     if option_type == OPT_YES:
@@ -709,7 +991,9 @@ def _attack_text(attack: Any) -> str:
         f"{_get(attack, 'name', '')} {_get(attack, 'text', '')}"
         .lower()
         .replace("’", "'")
+        .replace("\xa0", " ")
         .replace("pokémon", "pokemon")
+        .replace("{ex}", "ex")
     )
 
 
@@ -728,28 +1012,29 @@ def _bench_count(obs: Any, player_index: int) -> int:
     return len(_cards_in_area(obs, AREA_BENCH, player_index))
 
 
-def _estimate_damage_from_attack(
+def _estimate_damage_for_attacker(
     obs: Any,
+    attacker: Any,
+    defender: Any,
     attack: Any,
     profile: DeckProfile,
     cards: dict[int, CardInfo],
     player_index: int,
+    attacker_energy_override: int | None = None,
 ) -> int:
-    active = _active_pokemon(obs, player_index)
-    active_id = _card_id(active)
-    active_info = _card_info(active_id or 0, cards)
-    active_energy = _attached_energy_count(active)
-    opponent = _active_pokemon(obs, _opponent_index(obs, player_index))
-    opponent_info = _card_info(_card_id(opponent) or 0, cards)
-    opponent_energy = _attached_energy_count(opponent)
+    attacker_id = _card_id(attacker)
+    attacker_info = _card_info(attacker_id or 0, cards)
+    attacker_energy = _attached_energy_count(attacker) if attacker_energy_override is None else attacker_energy_override
+    defender_info = _card_info(_card_id(defender) or 0, cards)
+    defender_energy = _attached_energy_count(defender)
     text = _attack_text(attack)
     damage = _int(_get(attack, "damage", 0), 0)
-    attack_type = _energy_type_from_attack_text(text, active_info.energy_type)
+    attack_type = _energy_type_from_attack_text(text, attacker_info.energy_type)
     more_values = _more_damage_values(text)
 
     if "for each energy attached" in text and "opponent" not in text:
         multiplier = damage if damage > 0 else (more_values[0] if more_values else 40)
-        damage = max(damage, multiplier * active_energy)
+        damage = max(damage, multiplier * attacker_energy)
 
     if "for each" in text and "energy attached to all of your pokemon" in text:
         multiplier = damage if damage > 0 else (more_values[0] if more_values else 40)
@@ -767,16 +1052,16 @@ def _estimate_damage_from_attack(
         multiplier = damage if damage > 0 else 100
         damage = max(damage, multiplier * max(1, expected_hits))
 
-    if "pokemon ex" in text and "more damage" in text and opponent_info.ex and more_values:
+    if "pokemon ex" in text and "more damage" in text and defender_info.ex and more_values:
         damage += max(more_values)
 
     if "already has any damage counters" in text and "more damage" in text and more_values:
-        if opponent is not None and _remaining_hp(opponent, cards) < _card_info(_card_id(opponent) or 0, cards).hp:
+        if defender is not None and _remaining_hp(defender, cards) < defender_info.hp:
             damage += max(more_values)
 
     if "for each energy attached to your opponent's active" in text:
         multiplier = more_values[0] if more_values else damage
-        damage += multiplier * opponent_energy
+        damage += multiplier * defender_energy
 
     if "for each of your opponent's benched" in text or "for each your opponent's benched" in text:
         multiplier = more_values[0] if more_values else damage
@@ -789,6 +1074,18 @@ def _estimate_damage_from_attack(
         )
 
     return max(0, damage)
+
+
+def _estimate_damage_from_attack(
+    obs: Any,
+    attack: Any,
+    profile: DeckProfile,
+    cards: dict[int, CardInfo],
+    player_index: int,
+) -> int:
+    active = _active_pokemon(obs, player_index)
+    opponent = _active_pokemon(obs, _opponent_index(obs, player_index))
+    return _estimate_damage_for_attacker(obs, active, opponent, attack, profile, cards, player_index)
 
 
 def _attack_is_usable(attack: Any, active_energy: int) -> bool:
@@ -889,7 +1186,147 @@ def _effective_attack_damage(
     return _apply_weakness_resistance(raw_damage, attack_type, defender, cards)
 
 
+def _effective_damage_for_attacker(
+    obs: Any,
+    attacker: Any,
+    defender: Any,
+    profile: DeckProfile,
+    cards: dict[int, CardInfo],
+    attacks,
+    player_index: int,
+    extra_energy: int = 0,
+) -> int:
+    attacker_id = _card_id(attacker)
+    info = _card_info(attacker_id or 0, cards)
+    if not info.is_pokemon:
+        return 0
+
+    energy_count = _attached_energy_count(attacker) + extra_energy
+    best = 0
+    for attack_id in info.attack_ids:
+        attack = attacks.get(attack_id)
+        if attack is None or _int(_get(attack, "energy_count", 0), 0) > energy_count:
+            continue
+        raw_damage = _estimate_damage_for_attacker(
+            obs,
+            attacker,
+            defender,
+            attack,
+            profile,
+            cards,
+            player_index,
+            attacker_energy_override=energy_count,
+        )
+        if _attack_ignores_weakness(attack):
+            damage = raw_damage
+        else:
+            attack_type = _energy_type_from_attack_text(_attack_text(attack), info.energy_type)
+            damage = _apply_weakness_resistance(raw_damage, attack_type, defender, cards)
+        best = max(best, damage)
+
+    return best
+
+
+def _fallback_threat_damage(pokemon: Any, cards: dict[int, CardInfo], extra_energy: int) -> int:
+    card_id = _card_id(pokemon)
+    if card_id is None:
+        return 0
+
+    info = _card_info(card_id, cards)
+    energy_count = _attached_energy_count(pokemon) + extra_energy
+    damage = energy_count * 45
+    if info.ex:
+        damage += 35
+    if info.stage1 or info.stage2:
+        damage += 25
+    return damage
+
+
+def _opponent_threat_map(obs: Any, profile: DeckProfile, cards: dict[int, CardInfo], attacks) -> ThreatMap:
+    your_active = _active_pokemon(obs, _your_index(obs))
+    your_hp = _remaining_hp(your_active, cards)
+    opponent_index = _opponent_index(obs)
+    opponent_active = _active_pokemon(obs, opponent_index)
+
+    active_damage = _effective_damage_for_attacker(
+        obs,
+        opponent_active,
+        your_active,
+        profile,
+        cards,
+        attacks,
+        opponent_index,
+        extra_energy=1,
+    )
+    if active_damage <= 0:
+        active_damage = _fallback_threat_damage(opponent_active, cards, extra_energy=1)
+
+    bench_damage = 0
+    source_prize_value = _prize_value(_card_id(opponent_active), cards)
+    for pokemon in _cards_in_area(obs, AREA_BENCH, opponent_index):
+        damage = _effective_damage_for_attacker(
+            obs,
+            pokemon,
+            your_active,
+            profile,
+            cards,
+            attacks,
+            opponent_index,
+            extra_energy=1,
+        )
+        if damage <= 0:
+            damage = int(_fallback_threat_damage(pokemon, cards, extra_energy=1) * 0.8)
+        if damage > bench_damage:
+            bench_damage = damage
+            source_prize_value = _prize_value(_card_id(pokemon), cards)
+
+    max_damage = max(active_damage, bench_damage)
+    return ThreatMap(
+        damage_to_active=max_damage,
+        active_damage_to_active=active_damage,
+        bench_damage_to_active=bench_damage,
+        max_source_prize_value=source_prize_value,
+        can_ko_active=max_damage >= your_hp > 0,
+    )
+
+
+def _gust_expected_value(obs: Any, profile: DeckProfile, cards: dict[int, CardInfo], attacks) -> float:
+    attacker = _active_pokemon(obs, _your_index(obs))
+    if attacker is None:
+        return 0.0
+
+    best = 0.0
+    for target in _cards_in_area(obs, AREA_BENCH, _opponent_index(obs)):
+        damage = _effective_damage_for_attacker(
+            obs,
+            attacker,
+            target,
+            profile,
+            cards,
+            attacks,
+            _your_index(obs),
+            extra_energy=0,
+        )
+        target_hp = _remaining_hp(target, cards)
+        target_prizes = _prize_value(_card_id(target), cards)
+        target_energy = _attached_energy_count(target)
+
+        value = min(220, damage) * 0.55
+        if damage >= target_hp > 0:
+            value += 820 + target_prizes * 360
+        elif target_energy >= 2:
+            value += 160 + target_energy * 45
+        if _card_info(_card_id(target) or 0, cards).ex:
+            value += 90
+        best = max(best, value)
+
+    return best
+
+
 def _estimate_visible_threat_damage(obs: Any, player_index: int, profile: DeckProfile, cards: dict[int, CardInfo], attacks) -> int:
+    if player_index == _opponent_index(obs):
+        return _opponent_threat_map(obs, profile, cards, attacks).damage_to_active
+
     active = _active_pokemon(obs, player_index)
     active_id = _card_id(active)
     if active_id is None:
@@ -999,6 +1436,192 @@ def _energy_gap_for_active(obs: Any, cards: dict[int, CardInfo], attacks) -> tup
     return active, current, desired, max(0, desired - current)
 
 
+def _energy_cost_gap(cost_types: tuple[str, ...], attached_types: list[str]) -> int:
+    if not cost_types:
+        return 0
+
+    remaining = Counter(attached_types)
+    missing_specific = 0
+    colorless_needed = 0
+    for required in cost_types:
+        if required == "colorless":
+            colorless_needed += 1
+        elif remaining[required] > 0:
+            remaining[required] -= 1
+        else:
+            missing_specific += 1
+
+    spare_attached = sum(remaining.values())
+    return missing_specific + max(0, colorless_needed - spare_attached)
+
+
+def _attack_cost_types(attack: Any) -> tuple[str, ...]:
+    energy_types = tuple(_get(attack, "energy_types", ()) or ())
+    if energy_types:
+        return energy_types
+    return ("colorless",) * _int(_get(attack, "energy_count", 0), 0)
+
+
+def _evolution_targets_for_card(card_id: int | None, profile: DeckProfile, cards: dict[int, CardInfo]) -> tuple[int, ...]:
+    info = _card_info(card_id or 0, cards)
+    return profile.evolves_from_name.get(info.name, ())
+
+
+def _preferred_energy_count_for_line(card_id: int | None, profile: DeckProfile, cards: dict[int, CardInfo], attacks) -> int:
+    desired = _preferred_energy_count(card_id, cards, attacks)
+    for evolution_id in _evolution_targets_for_card(card_id, profile, cards):
+        desired = max(desired, _preferred_energy_count(evolution_id, cards, attacks))
+    return desired
+
+
+def _line_attacker_bonus(card_id: int | None, profile: DeckProfile, cards: dict[int, CardInfo]) -> float:
+    if card_id is None:
+        return 0.0
+
+    bonus = 0.0
+    if card_id in profile.attacker_ids[:1]:
+        bonus = max(bonus, 280.0)
+    elif card_id in profile.attacker_ids[:3]:
+        bonus = max(bonus, 100.0)
+
+    for evolution_id in _evolution_targets_for_card(card_id, profile, cards):
+        if evolution_id in profile.attacker_ids[:1]:
+            bonus = max(bonus, 260.0)
+        elif evolution_id in profile.attacker_ids[:3]:
+            bonus = max(bonus, 140.0)
+
+    return bonus
+
+
+def _attack_energy_progress_bonus(
+    obs: Any,
+    energy_type: str | None,
+    target: Any,
+    profile: DeckProfile,
+    cards: dict[int, CardInfo],
+    attacks,
+) -> float:
+    if target is None or energy_type is None:
+        return 0.0
+
+    card_id = _card_id(target)
+    info = _card_info(card_id or 0, cards)
+    if not info.is_pokemon:
+        return 0.0
+
+    current_types = _attached_energy_types(target, cards)
+    next_types = current_types + [energy_type]
+    best = 0.0
+    for attack_id in info.attack_ids:
+        attack = attacks.get(attack_id)
+        if attack is None:
+            continue
+
+        cost_types = _attack_cost_types(attack)
+        before_gap = _energy_cost_gap(cost_types, current_types)
+        after_gap = _energy_cost_gap(cost_types, next_types)
+        if after_gap >= before_gap:
+            continue
+
+        damage = _effective_damage_for_attacker(
+            obs,
+            target,
+            _active_pokemon(obs, _opponent_index(obs)),
+            profile,
+            cards,
+            attacks,
+            _your_index(obs),
+            extra_energy=1,
+        )
+        if after_gap == 0:
+            best = max(best, 360 + min(180, damage * 0.45))
+        else:
+            best = max(best, 160 + min(100, damage * 0.25))
+
+    return best
+
+
+def _attachment_progress_bonus(
+    obs: Any,
+    energy_id: int | None,
+    target: Any,
+    profile: DeckProfile,
+    cards: dict[int, CardInfo],
+    attacks,
+) -> float:
+    energy = _card_info(energy_id or 0, cards)
+    target_id = _card_id(target)
+    if energy.kind != "basic_energy" or target_id is None:
+        return 0.0
+
+    current = _attached_energy_count(target)
+    desired = _preferred_energy_count_for_line(target_id, profile, cards, attacks)
+    gap = max(0, desired - current)
+    progress = _attack_energy_progress_bonus(obs, energy.energy_type, target, profile, cards, attacks)
+    line_bonus = _line_attacker_bonus(target_id, profile, cards)
+
+    if gap <= 0:
+        return min(progress, 80) - 180
+
+    bonus = progress
+    if line_bonus > 0:
+        bonus += line_bonus + min(gap, 3) * 55
+        if current == 0:
+            bonus += 60
+
+    target_info = _card_info(target_id, cards)
+    if target_info.energy_type == energy.energy_type:
+        bonus += 70
+    elif progress <= 0 and energy_id not in profile.main_energy_ids:
+        bonus -= 90
+
+    return bonus
+
+
+def _attachment_target_value(
+    obs: Any,
+    target: Any,
+    profile: DeckProfile,
+    cards: dict[int, CardInfo],
+    attacks,
+) -> float:
+    target_id = _card_id(target)
+    if target_id is None:
+        return 0.0
+
+    current = _attached_energy_count(target)
+    desired = _preferred_energy_count_for_line(target_id, profile, cards, attacks)
+    gap = max(0, desired - current)
+    if gap <= 0:
+        return 120 + _pokemon_value(target_id, cards, profile.deck_counts) * 0.08
+
+    candidate_types = {
+        _card_info(energy_id, cards).energy_type
+        for energy_id in profile.basic_energy_ids
+        if _card_info(energy_id, cards).energy_type is not None
+    }
+    target_info = _card_info(target_id, cards)
+    if target_info.energy_type is not None:
+        candidate_types.add(target_info.energy_type)
+
+    progress = max(
+        (_attack_energy_progress_bonus(obs, energy_type, target, profile, cards, attacks) for energy_type in candidate_types),
+        default=0.0,
+    )
+    line_bonus = _line_attacker_bonus(target_id, profile, cards)
+
+    value = 260 + _pokemon_value(target_id, cards, profile.deck_counts) * 0.18 + min(gap, 3) * 70
+    value += progress
+    value += line_bonus
+    if current == 0 and line_bonus > 0:
+        value += 70
+
+    if target is _your_active_pokemon(obs):
+        value += 35
+
+    return value
+
+
 def _energy_accel_available(options: list[Any], obs: Any, cards: dict[int, CardInfo]) -> bool:
     for option in options:
         if _int(_get(option, "type")) != OPT_PLAY:
@@ -1096,6 +1719,118 @@ def _boost_build_before_attack(
                 if energy_accel_open and gap >= 2 and not supporter_played:
                     offset -= 120
                 boosted = max(boosted, best_attack_score + offset)
+
+        adjusted.append((idx, boosted))
+
+    return adjusted
+
+
+def _best_attack_damage_from_options(
+    obs: Any,
+    options: list[Any],
+    profile: DeckProfile,
+    cards: dict[int, CardInfo],
+    attacks,
+) -> int:
+    best = 0
+    for option in options:
+        if _int(_get(option, "type")) == OPT_ATTACK:
+            best = max(best, _effective_attack_damage(obs, option, profile, cards, attacks))
+    return best
+
+
+def _choose_tactical_guardrail_action(
+    obs: Any,
+    options: list[Any],
+    profile: DeckProfile,
+    cards: dict[int, CardInfo],
+    attacks,
+) -> list[int] | None:
+    opponent = _active_pokemon(obs, _opponent_index(obs))
+    opponent_hp = _remaining_hp(opponent, cards)
+    if opponent is None or opponent_hp <= 0:
+        return None
+
+    lethal_attacks: list[tuple[int, int, int]] = []
+    for idx, option in enumerate(options):
+        if _int(_get(option, "type")) != OPT_ATTACK:
+            continue
+        damage = _effective_attack_damage(obs, option, profile, cards, attacks)
+        if damage >= opponent_hp:
+            lethal_attacks.append((_prize_value(_card_id(opponent), cards), damage, idx))
+
+    if lethal_attacks:
+        _, _, best_idx = max(lethal_attacks)
+        return [best_idx]
+
+    return None
+
+
+def _has_reasonable_retreat_pivot(obs: Any, threat: ThreatMap, cards: dict[int, CardInfo]) -> bool:
+    active = _your_active_pokemon(obs)
+    active_prizes = _prize_value(_card_id(active), cards)
+    active_energy = _attached_energy_count(active)
+
+    for pokemon in _cards_in_area(obs, AREA_BENCH, _your_index(obs)):
+        pivot_prizes = _prize_value(_card_id(pokemon), cards)
+        pivot_energy = _attached_energy_count(pokemon)
+        pivot_hp = _remaining_hp(pokemon, cards)
+        if pivot_prizes < active_prizes:
+            return True
+        if pivot_energy + 1 < active_energy and pivot_hp > threat.active_damage_to_active * 0.55:
+            return True
+        if pivot_hp > _remaining_hp(active, cards) + 60:
+            return True
+    return False
+
+
+def _apply_tactical_score_adjustments(
+    obs: Any,
+    options: list[Any],
+    scored: list[tuple[int, float]],
+    profile: DeckProfile,
+    cards: dict[int, CardInfo],
+    attacks,
+) -> list[tuple[int, float]]:
+    active = _your_active_pokemon(obs)
+    if active is None:
+        return scored
+
+    threat = _opponent_threat_map(obs, profile, cards, attacks)
+    if not threat.can_ko_active:
+        return scored
+
+    best_attack_damage = _best_attack_damage_from_options(obs, options, profile, cards, attacks)
+    opponent = _active_pokemon(obs, _opponent_index(obs))
+    opponent_hp = _remaining_hp(opponent, cards)
+    active_prizes = _prize_value(_card_id(active), cards)
+    active_energy = _attached_energy_count(active)
+    can_take_prize = _any_attack_takes_prize(obs, options, profile, cards, attacks)
+    should_preserve_active = (
+        not can_take_prize
+        and _bench_count(obs, _your_index(obs)) > 0
+        and _has_reasonable_retreat_pivot(obs, threat, cards)
+        and (active_prizes >= 2 or active_energy >= 3)
+    )
+
+    adjusted: list[tuple[int, float]] = []
+    for idx, score in scored:
+        option = options[idx]
+        option_type = _int(_get(option, "type"))
+        boosted = score
+
+        if option_type == OPT_RETREAT and should_preserve_active:
+            pressure_gap = max(0, threat.damage_to_active - _remaining_hp(active, cards))
+            boosted += 640 + active_prizes * 140 + active_energy * 55 + min(220, pressure_gap)
+
+        if option_type == OPT_ATTACH and should_preserve_active and _is_active_target(obs, option):
+            boosted -= 520 + active_prizes * 90 + active_energy * 35
+
+        if option_type == OPT_PLAY and should_preserve_active:
+            card_id = _resolve_option_card_id(obs, option)
+            info = _card_info(card_id or 0, cards)
+            if "energy_accel" in _role(card_id or 0, info) and best_attack_damage < opponent_hp * 0.55:
+                boosted -= 220
 
         adjusted.append((idx, boosted))
 
@@ -1327,6 +2062,7 @@ def _evaluate_observation(
     profile: DeckProfile,
     cards: dict[int, CardInfo],
     attacks,
+    deck: list[int] | None = None,
     root_your_index: int | None = None,
 ) -> float:
     state = _state(obs)
@@ -1355,7 +2091,7 @@ def _evaluate_observation(
     select = _select(obs)
     options = _as_list(_get(select, "option", []))
     if options and _int(_get(state, "yourIndex", your_index), your_index) == your_index:
-        best_next = max((_score_option(obs, option, profile, cards, attacks) for option in options), default=0)
+        best_next = max((_score_option(obs, option, profile, cards, attacks, deck) for option in options), default=0)
         score += max(-200, min(best_next, 900)) * 0.16
 
     return score
@@ -1437,6 +2173,7 @@ def _choose_with_simulator_search(
                 profile,
                 cards,
                 attacks,
+                deck=deck,
                 root_your_index=_your_index(obs),
             )
             value += heuristic.get(idx, 0) * 0.08
@@ -1475,6 +2212,18 @@ def _choose_yes_no(obs: Any, options: list[Any]) -> list[int]:
     return [0] if options else []
 
 
+def _score_count_choice(obs: Any, option: Any) -> int:
+    number = _int(_get(option, "number"), 0)
+    context = _int(_get(_select(obs), "context"))
+    if context != CTX_DRAW_COUNT:
+        return number
+
+    deck_count = _int(_get(_player(obs), "deckCount", 0), 0)
+    if number > deck_count:
+        return -10000 - number
+    return number
+
+
 def choose_action(obs: Any, deck: list[int] | None = None, use_search: bool = True) -> list[int]:
     """Return legal option indexes for the current observation."""
 
@@ -1504,7 +2253,7 @@ def choose_action(obs: Any, deck: list[int] | None = None, use_search: bool = Tr
         # Count prompts usually ask how much of a beneficial effect to take.
         ranked = sorted(
             range(len(options)),
-            key=lambda idx: _int(_get(options[idx], "number"), idx),
+            key=lambda idx: (_score_count_choice(obs, options[idx]), -idx),
             reverse=True,
         )
         return ranked[: max(1, min_count)]
@@ -1519,12 +2268,18 @@ def choose_action(obs: Any, deck: list[int] | None = None, use_search: bool = Tr
         return ranked[:take]
 
     ranked_scores = [
-        (idx, _score_option(obs, option, profile, cards, attacks))
+        (idx, _score_option(obs, option, profile, cards, attacks, deck))
         for idx, option in enumerate(options)
     ]
     if select_type == 0 and min_count == 1 and max_count == 1:
         ranked_scores = _boost_build_before_attack(obs, options, ranked_scores, profile, cards, attacks)
+        ranked_scores = _apply_tactical_score_adjustments(obs, options, ranked_scores, profile, cards, attacks)
     ranked_scores.sort(key=lambda item: (item[1], -item[0]), reverse=True)
+
+    if select_type == 0 and min_count == 1 and max_count == 1:
+        guardrail_action = _choose_tactical_guardrail_action(obs, options, profile, cards, attacks)
+        if guardrail_action is not None:
+            return guardrail_action
 
     if use_search and select_type == 0 and min_count == 1 and max_count == 1:
         searched = _choose_with_simulator_search(obs, deck, profile, cards, attacks, ranked_scores)
