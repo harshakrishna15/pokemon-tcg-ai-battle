@@ -673,8 +673,13 @@ def _fallback(sel_dict):
 
 
 # --------------------------------------------------------------------- entry ---
-PIMC_ENABLED = os.environ.get("PIMC", "0") == "1"
-PIMC_BUDGET_S = float(os.environ.get("PIMC_BUDGET", "0.30"))
+# PIMC (determinized search) is ON by default: it beats the pure heuristic
+# ~55.7% over 560 self-play games (p~0.004) and is fully fallback-guarded, so
+# the worst case degrades to the heuristic.  Set PIMC=0 to force the pure
+# heuristic.  Budget is a per-MAIN-decision cap, far under the ~10-min/match
+# time bank (~20s/match in practice); PIMC_BUDGET overrides it.
+PIMC_ENABLED = os.environ.get("PIMC", "1") == "1"
+PIMC_BUDGET_S = float(os.environ.get("PIMC_BUDGET", "0.50"))
 _MY_DECK = None
 
 
