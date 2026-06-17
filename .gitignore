@@ -21,11 +21,22 @@ env/
 # Python
 __pycache__/
 *.py[cod]
+.ipynb_checkpoints/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
 .coverage
 htmlcov/
+
+# Kaggle / simulation local artifacts
+sample_submission.zip
+submission.zip
+kaggle_submission.zip
+result.html
+replay*.html
+*.jsonl
+episode_replays/
+replays/
 
 # JavaScript / TypeScript
 npm-debug.log*
